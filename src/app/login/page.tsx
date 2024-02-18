@@ -1,5 +1,6 @@
 
 const LoginPage = () => {
+  console.log('hello');
   return (
     <div>LoginPage</div>
   )
