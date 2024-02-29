@@ -1,6 +1,7 @@
 import AddArticleForm from "./AddArticleForm"
 
-const AdminPage = () => {
+const AdminPage = async () => {
+  await new Promise((resolve)=>setTimeout(resolve, 10000))
   return (
     <div className="h-[calc(100vh-150px)] flex justify-center items-center px-5 lg:px-20">
       <div className="shadow p-4 bg-purple-200 rounded w-full">
