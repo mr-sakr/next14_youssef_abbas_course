@@ -1,15 +1,17 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const SearchArticleInput = () => {
     const [searchText, setSearchText] = useState('');
+    const router = useRouter();
 
     const formSubmitHandler = (e:React.FormEvent) =>{
         e.preventDefault();
 
         console.log({searchText});
-        
+        router.push(`/articles/search?text=${searchText}`);
     }
 
     return (

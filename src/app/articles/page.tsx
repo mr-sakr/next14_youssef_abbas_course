@@ -11,7 +11,7 @@ export const metadata:Metadata = {
 
 const ArticlesPage = async () => {
 
-  await new Promise((resolve) => setTimeout(resolve, 10000));
+  // await new Promise((resolve) => setTimeout(resolve, 10000));
 
   const response = await fetch("https://jsonplaceholder.typicode.com/posts");
 
