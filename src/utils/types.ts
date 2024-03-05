@@ -3,4 +3,4 @@ export type Article = {
     userId:number;
     title:string;
     body:string
-    }
+}
