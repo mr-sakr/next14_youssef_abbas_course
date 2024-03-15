@@ -3,5 +3,5 @@ import { z } from "zod";
 // Validation
 export const createArticleSchema = z.object({
     title: z.string().min(2).max(200),
-    body: z.string().min(10),
+    description: z.string().min(10),
 });
