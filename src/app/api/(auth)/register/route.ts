@@ -3,6 +3,8 @@ import { RegisterUserDto } from "@/utils/dtos";
 import { registerUserSchema } from "@/utils/validationSchemas";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from 'bcryptjs';
+import { generateJWT } from "@/utils/generateToken";
+import { JWTPayload } from "@/utils/types";
 
 /**
  * @method  POST
@@ -47,8 +49,12 @@ export async function POST(request: NextRequest){
             }
         })
 
-        // @Todo -> Generate JWT Token
-        const token = null;
+        const jwtPayload : JWTPayload = {
+            id: newUser.id,
+            username: newUser.username,
+            isAdmin: newUser.isAdmin
+        }
+        const token = generateJWT(jwtPayload);
 
         return NextResponse.json({...newUser, token}, { status:201 });
     } catch (error) {
