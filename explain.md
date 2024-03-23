@@ -4682,4 +4682,452 @@ return NextResponse.json(
 
 
 
+في هذا ال commit هنتكلم عن ال Json Web Token - JWT ،
+
+فمثلاً عند تسجيل دخولك كمستخدم في الفيسبوك ، فإن ال server بيرسل token مشفر لل client ، 
+ويتم إرساله مع private key مشفر ، بحيث لو الهاكر عرف يفك ال token مش هيعرف يفك ال private key ، 
+وهذا ال token يحتوى على بعض البيانات مثل ال id وال username وهكذا ، 
+
+فعند تسجيل الدخول ، يتم إستلام token من ال server وحفظه بال browser ،
+ونستفيد منه عندما يقوم المستخدم بإرسال request سواء لحذف post او اضافة او اي request ، فيتم إرسال ال token لل server ،
+يقوم ال server بفك ال token لو تمام هينفذ ال request ،
+
+
+الموقع الرسمي لل jwt هو :
+https://jwt.io/
+
+فال token يكون كالتالي : 
+```jwt
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+```
+
+فسنلاحظ أن ال token مقسم ل 3 أجزاء
+HEADER:ALGORITHM & TOKEN TYPE
+وهو يحتوي على معلومات مثل ال Algorism المستخدم في تشفير ال token ،
+وال type لهذا ال token هو jwt ، 
+```json
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+
+PAYLOAD:DATA
+وبه بيانات المستخدم 
+```json
+{
+  "sub": "1234567890",
+  "name": "John Doe",
+  "iat": 1516239022
+}
+```
+
+
+VERIFY SIGNATURE
+وهو التوقيع ، وهو عبارة عن ال private key ، 
+```
+HMACSHA256(
+  base64UrlEncode(header) + "." +
+  base64UrlEncode(payload),
+  
+your-256-bit-secret
+
+) secret base64 encoded
+```
+
+
+-------
+
+لتسطيب المكتب ، من خلال الأمر التالي : 
+```
+npm i jsonwebtoken
+```
+
+ولأننا نستخدم ال typescript فسيتم تثبيت ال types لل jsonwebtoken كالتالي : 
+```
+npm i @types/jsonwebtoken -D
+```
+لاحظ أننا إستخدمنا D- ليتم إضافتها لل devDependencies ، 
+
+
+
+هنعمل بقى دلوقتى generate  لل token  ، وذلك من خلال ال login route ، كالتالي 
+
+فأولاً هنعمل import لل jwt كالتالي : 
+```ts
+import Jwt from "jsonwebtoken";
+```
+
+بعد كده هنعمل const token ونجيب قيمتها بإستخدام jwt مع sign() method ، كالتالي : 
+```ts
+const token = Jwt.sign();
+```
+
+حيث أن ال sign تقوم بعمل ال token ، ولكنها تريد بعض ال arguments ، 
+أولاً ال payload وهي بيانات المستخدم ،  
+فيمكننا عمل const jwtPayload ونخزن فيه بيانات المستخدم ، أي بيانات تريدها ،
+
+ثانياً ال private key ، ويمكنك كتابته بأي اسم تريد مثلا "privatekey19837840993" وهو مهم جداً ولا يجب لأي أحد الحصول عليه ،  
+
+ثالثاً ال signOptions ، وهو اختياري ، ويمكن لنا تحديد مدة ال token بإستخدام expiresIn property ، والتي يتم كتابته في string مثل '30d' لتعبر عن 30 يوم ،
+او '2d' أو '10h' لتعبر عن 10 ساعات ، او "5m" لتعبر عن 5 دقائق ، وهكذا ، 
+
+وخد بالك اننا كنا قد مررنا ال token بالسابق ، ليكون الكود في النهاية كالتالي : 
+
+```ts
+import prisma from "@/utils/db";
+import { LoginUserDto } from "@/utils/dtos";
+import { loginUserSchema } from "@/utils/validationSchemas";
+import { NextRequest, NextResponse } from "next/server";
+import bcrypt from 'bcryptjs';
+import Jwt from "jsonwebtoken";
+
+/**
+ * @method  POST 
+ * @route   ~/api/login
+ * @desc    Login User [(Sign-in) (تسجيل دخول)]
+ * @access  public
+ */
+
+export async function POST(request: NextRequest){
+    try {
+        const body = await request.json() as LoginUserDto;
+        const validation = loginUserSchema.safeParse(body);
+
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            );
+        }
+
+        const user = await prisma.user.findUnique({ where:{email: body.email} });
+        
+        if(!user){
+            return NextResponse.json(
+                {message: 'Invalid Email Or Password'},
+                {status: 400}
+            )
+        }
+
+        const isPasswordMatch = await bcrypt.compare(body.password, user.password);
+
+        if(!isPasswordMatch){
+            return NextResponse.json(
+                {message: 'Invalid Email Or Password'},
+                {status: 400}
+            )
+        }
+
+        const jwtPayload = {
+            id: user.id,
+            username: user.username,
+            isAdmin: user.isAdmin
+        }
+        const token = Jwt.sign(jwtPayload, "privatekey19837840993", {
+            expiresIn: '30d'
+        });
+
+        return NextResponse.json(
+            {message: 'Authenticated', token},
+            {status: 200}
+        );
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+
+وبعد ذلك لو فتحنا ال postman وعملنا login بإستخدام ال email وال password كالتالي : 
+```json
+{
+    "email": "sakr@gmail.com",
+    "password": "123456"
+}
+```
+
+فسيتم إرجاع رسالة Authenticated ومعها ال token كالتالي : 
+```ts
+{
+    "message": "Authenticated",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MywidXNlcm5hbWUiOiJzYWtyIiwiaXNBZG1pbiI6ZmFsc2UsImlhdCI6MTcxMTEyMDkzNSwiZXhwIjoxNzEzNzEyOTM1fQ.XqQXpvCKqr5M6sTiCXC1SupUrJY2OWS-1i-vVLJ5UAE"
+}
+```
+
+فهذا ال token يحتوى على بيانات ، فممكن ننسخ ال token ونفتح موقع ال jwt.io ونحط ال token فيه ، هنلاحظ التالي : 
+أن القسم الأول من ال token كالتالي : 
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+```
+يتم فكه ليكون : 
+HEADER:ALGORITHM & TOKEN TYPE
+```json
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+
+القسم الثاني : 
+```
+eyJpZCI6MywidXNlcm5hbWUiOiJzYWtyIiwiaXNBZG1pbiI6ZmFsc2UsImlhdCI6MTcxMTEyMDkzNSwiZXhwIjoxNzEzNzEyOTM1fQ
+```
+ويتم فكه ليصبح كالتالي : 
+PAYLOAD:DATA
+```json
+{
+  "id": 3,
+  "username": "sakr",
+  "isAdmin": false,
+  "iat": 1711120935,
+  "exp": 1713712935
+}
+```
+
+القسم الثالث : هو عبارة عن ال private key ، فهو كالتالي : 
+```
+XqQXpvCKqr5M6sTiCXC1SupUrJY2OWS-1i-vVLJ5UAE
+```
+
+ولكن علينا تحديد قيمة ال private key ليصبح Valid Signature ، كالتالي : 
+
+```json
+HMACSHA256(
+  base64UrlEncode(header) + "." +
+  base64UrlEncode(payload),
+  
+privatekey19837840993
+
+) secret base64 encoded
+```
+
+
+
+ولأن ال private key هو سري جداً ، فلا يصح أن يكون في ملفات المشروع المرفوعة على ال github ، ولكننا سنخزنه في ملف ال env كالتالي : 
+```
+JWT_SECRET=privatekey19837840993
+```
+
+ويتم كتابة اسمه بالكود كالتالي ، مع ملاحظة اننا اضفنا as string بسبب ال typescript : 
+```ts
+const token = Jwt.sign(jwtPayload, process.env.JWT_SECRET as string, {
+            expiresIn: '30d'
+        });
+```
+
+
+خد بالك هنعمل run لل server مرة أخري ب npm run dev ، وذلك لأننا عملنا تغيير في ملف ال env .
+
+
+ثم بعد ذلك هنعمل نفس ال token بملف ال register ، 
+ولك الأفضل أننا نعمل ملف موحد لذلك بإسم generateToken.ts داخل فولدر utils كالتالي : 
+```ts
+import Jwt from "jsonwebtoken";
+
+type JWTPayload = {
+    id: number,
+    username: string,
+    isAdmin: boolean
+}
+
+export function generateJWT(jwtPayload: JWTPayload) : string {
+    const privateKey = process.env.JWT_SECRET as string ;
+    const token = Jwt.sign(jwtPayload, privateKey,{
+        expiresIn: '30d'
+    });
+
+    return token;
+}
+```
+
+ولكن هننقل ال type JWTPayload بملف ال types.ts لنحصل عليه بأي ملف بأي وقت ، لأننا هنحتاجه في ال login وال register ، 
+```ts
+export type JWTPayload = {
+    id: number,
+    username: string,
+    isAdmin: boolean
+}
+```
+
+
+وبالتالي فإن ملف generateToken.ts سيكون كالتالي : 
+```ts
+import Jwt from "jsonwebtoken";
+import { JWTPayload } from "./types";
+
+export function generateJWT(jwtPayload: JWTPayload) : string {
+    const privateKey = process.env.JWT_SECRET as string ;
+    const token = Jwt.sign(jwtPayload, privateKey,{
+        expiresIn: '30d'
+    });
+
+    return token;
+}
+```
+
+
+وملف ال login/route.ts سيكون كالتالي : 
+```ts
+import prisma from "@/utils/db";
+import { LoginUserDto } from "@/utils/dtos";
+import { loginUserSchema } from "@/utils/validationSchemas";
+import { NextRequest, NextResponse } from "next/server";
+import bcrypt from 'bcryptjs';
+import { generateJWT } from "@/utils/generateToken";
+import { JWTPayload } from "@/utils/types";
+
+/**
+ * @method  POST 
+ * @route   ~/api/login
+ * @desc    Login User [(Sign-in) (تسجيل دخول)]
+ * @access  public
+ */
+
+export async function POST(request: NextRequest){
+    try {
+        const body = await request.json() as LoginUserDto;
+        const validation = loginUserSchema.safeParse(body);
+
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            );
+        }
+
+        const user = await prisma.user.findUnique({ where:{email: body.email} });
+        
+        if(!user){
+            return NextResponse.json(
+                {message: 'Invalid Email Or Password'},
+                {status: 400}
+            )
+        }
+
+        const isPasswordMatch = await bcrypt.compare(body.password, user.password);
+
+        if(!isPasswordMatch){
+            return NextResponse.json(
+                {message: 'Invalid Email Or Password'},
+                {status: 400}
+            )
+        }
+
+        const jwtPayload : JWTPayload = {
+            id: user.id,
+            username: user.username,
+            isAdmin: user.isAdmin
+        }
+        const token = generateJWT(jwtPayload)
+
+        return NextResponse.json(
+            {message: 'Authenticated', token},
+            {status: 200}
+        );
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+وملف ال register/route.ts كالتالي : 
+```ts
+import prisma from "@/utils/db";
+import { RegisterUserDto } from "@/utils/dtos";
+import { registerUserSchema } from "@/utils/validationSchemas";
+import { NextRequest, NextResponse } from "next/server";
+import bcrypt from 'bcryptjs';
+import { generateJWT } from "@/utils/generateToken";
+import { JWTPayload } from "@/utils/types";
+
+/**
+ * @method  POST
+ * @route   ~/api/register
+ * @desc    Create New Account [ (register) || (sign-up) || (إنشاء حساب) ]
+ * @access  public
+ */
+
+
+export async function POST(request: NextRequest){
+    try {
+        const body = await request.json() as RegisterUserDto;
+        const validation = registerUserSchema.safeParse(body);
+
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            );
+        }
+
+        const user = await prisma.user.findUnique({where:{email: body.email}});
+        if(user){
+            return NextResponse.json(
+                { message: 'This User is already registered' },
+                { status: 400 }
+            )
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(body.password, salt);
+        const newUser = await prisma.user.create({
+            data:{
+                username: body.username,
+                email: body.email,
+                password: hashedPassword
+            },
+            select:{
+                username: true,
+                id: true,
+                isAdmin: true
+            }
+        })
+
+        const jwtPayload : JWTPayload = {
+            id: newUser.id,
+            username: newUser.username,
+            isAdmin: newUser.isAdmin
+        }
+        const token = generateJWT(jwtPayload);
+
+        return NextResponse.json({...newUser, token}, { status:201 });
+    } catch (error) {
+        return NextResponse.json(
+            { message: 'Internal Server Error' },
+            { status: 500 }
+        );
+    }
+}
+```
+
+بعدها لو جربنا ال register في ال postman كالتالي : 
+```json
+{
+    "username": "sakr",
+    "email": "sakr9@gmail.com",
+    "password": "123456"
+}
+```
+
+هيطلع النتيجة التالية : 
+```json
+{
+    "username": "sakr",
+    "id": 10,
+    "isAdmin": false,
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInVzZXJuYW1lIjoic2FrciIsImlzQWRtaW4iOmZhbHNlLCJpYXQiOjE3MTExNjYyOTQsImV4cCI6MTcxMzc1ODI5NH0.2LIDNAOVTXuWOf31nwHv6_jBaD1tvpc7cScktsTXSGg"
+}
+```
+
+
+
 
