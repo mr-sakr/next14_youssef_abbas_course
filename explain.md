@@ -5131,3 +5131,134 @@ export async function POST(request: NextRequest){
 
 
 
+
+
+------------------------------------------------------------------------------------------------------
+
+
+
+
+
+في هذا ال commit هنعمل delete route handler لل user ، 
+وهنخلي ال user فقك هو اللي يقدر يحذف حسابه ، مش اي حد يحذف حساب يوزر تاني يعني ،
+
+فهنعمل route.ts داخل profile ليكون المسار كالتالي : 
+~/api/(auth)/profile/[id]
+
+وهنعمل import لل NextRequest وال NextResponse أولاً ، ولل prisma أيضاً ، 
+ثم نعمل interface Props لأن هيكون عندنا props ، 
+ونعمل ال documentation كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+
+interface Props {
+    params: { id: string }
+}
+
+/**
+ * @method  Delete
+ * @route   ~/api/profile/:id
+ * @desc    Delete Profile
+ * @access  private
+ */
+```
+
+وهنجهز كود ال delete route handler ليكون كالتالي : 
+```ts
+export async function DELETE(request: NextRequest, {params} : Props){
+    try {
+        // Code ... 
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+وفي ال try هنحضر ال user أولاً ، ونتحقق إن لم يكن موجود يطلع رسالة error كالتالي : 
+```ts
+const user = await prisma.user.findUnique({ where: {id: parseInt(params.id)}});
+if(!user){
+    return NextResponse.json(
+        {message: 'User Not Found'},
+        {status: 404}
+    )
+}
+```
+
+ثم بعد ذلك ، لو ال user موجود ، هيتم عمل delete لل user بإستخدام delete function ، ثم نطلع رسالة أنه تم الحذف بنجاح ، كالتالي : 
+```ts
+await prisma.user.delete({where:{id: parseInt(params.id)}});
+return NextResponse.json(
+    {message: 'Your Profile Has Been Deleted Successfully'},
+    {status: 200}
+)
+```
+
+ولكن هذا الكود public ، بمعنى أن أي شخص يمكنه حذف أي user ، 
+فاحنا عايزينه private بمعنى أن اليوزر يمكنه حذف حسابه فقط ، 
+
+هنعمل request جديد بال postman ب DELETE method وال route يكون كالتالي : 
+```
+{{DOMAIN}}/api/profile/4
+```
+
+لو بإستخدام postman عملنا login بيوزر id = 1 مثلاً ، وحذفنا يوزر id = 2 ، فسيتم الحذف بدون مشاكل ، 
+وهذا خطأ في مشروعنا ، فالمفترض أن يكون اليوزر يستطيع حذف حسابه فقط ولا يحذف حساب الآخرين ،
+
+فلجعل هذا ال route يكون private ، فنستطيع استخدام ال token اللي استلمه ال user عند تسجيل الدخول ، ونرسله مع delete request ، 
+وسيقوم ال server بإستلام ال token ثم فك التشفير ، ثم بعد أن يفك ال token سيكون عنده بيانات المستخدم ، 
+وبعدها ال server هيقارن بين بيانات المستخدم اللي ارسل ال request ، وبيانات المستخدم المطلوب حذفه ، فلو هو نفس المستخدم فسيتم تنفيذ عملية الحذف ، 
+
+
+
+يمكننا الحصول على ال token المرسل بال request من خلال ال headers ، 
+وزي ماقلنا ان كل token بيكون ليه key وبالتالي للحصول على قيمة ال token فسيكون من خلال headers.keyName ، 
+
+فهنعمل import لل Jwt عشان نفك تشفير ال token ، وهنعمل const بإسم authToken مثلاً ، كالتالي : 
+```ts
+const authToken = request.headers.authToken;
+```
+لاحظ أن ال authToken اللي في النهاية دي هي عبارة عن ال Key Name لل token زي ماقلنا ، 
+ولكن للعلم هناخد ال auth token من ال cookies ، 
+
+فإحنا عندنا دلوقتي ال authToken مشفر ، فلفك التشفير هنستخدم jwt.verify() method ، واللي بتقبل ال token ، ثم ال private key واللي كنا قد خزناه في env ، كالتالي : 
+```ts
+const authToken = request.headers.get('authToken') as string;
+const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string);
+```
+
+هنتحقق من ال authToken ، قبل عمل verify ليكون الكود كالتالي : 
+```ts
+const authToken = request.headers.get('authToken') as string;
+if(!authToken){
+    return NextResponse.json(
+        {message: 'Not Token Provided, Access Is Denied'},
+        {status: 401} // Unauthorized
+    )
+}
+const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string) as JwtPayload;
+```
+
+بعدها هنتحقق لو ال userFromToken.id == user.id  فسيتم السماح للمستخدم بمسح ال profile ، كالتالي : 
+```ts
+if(userFromToken.id == user.id){
+    await prisma.user.delete({where:{id: parseInt(params.id)}});
+    return NextResponse.json(
+        {message: 'Your Profile Has Been Deleted Successfully'},
+        {status: 200}
+    )
+}
+```
+
+هتلاحظ خطأ typescript اسفل ال id الخاصة بال userFromToken لعدم تحديد نوعها ، وبالتالي هنحدد النوع في ال const userFromToken كالتالي : 
+```ts
+const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string) as JwtPayload;
+```
+
+فهنجرب بال postman هنلاحظ أنه لابد من تسجيل دخول المستخدم الذي نريد ان يتم حذفه فقط .
+
+
