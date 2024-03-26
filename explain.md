@@ -5262,3 +5262,168 @@ const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string) as
 فهنجرب بال postman هنلاحظ أنه لابد من تسجيل دخول المستخدم الذي نريد ان يتم حذفه فقط .
 
 
+
+
+
+----------------------------------------------------------------
+
+هنتكلم في هذا ال commit عن ال Middleware ، 
+ال middleware هو route handler بيعمل handle لل request وال response ،
+
+يعنى عنده القدرة إنه يعمل check عال request المرسل من ال client ، ويعطي أيضاً response لل client ،
+ال middleware هو من ضمن ال server ، لكن بيشتغل قبل ال server ، 
+
+على سبيل المثال ، ال request المرسل من ال client لل server ، هيمر الأول عال middleware ، ليتحقق أولاً هل هذا ال request عنده token أم لا ،
+لو مش عنده token ، فلن يسمح لل request بالدخول عال server ، وهيرسل response لل client ويقوله انك غير authorized ، 
+
+ولو كان عنده token ، فال middleware هيسمح لل request بالدخول لل server ، وبعد كده ال server هيرسل ال response لل client ،
+وهكذا يعمل ال middleware ،
+
+وبالتالي فال middleware يقلل ال trafic على ال server من خلال تجنب العديد من ال requests ، 
+وينفع أيضاً في المشاريع التى تستعمل ال protected routes ،
+
+
+لكي يمكننا عمل middleware ، 
+لابد أولاً من إنشاء ملف بإسم middleware.ts - هذا الاسم إجباري -
+ويتم إنشاء هذا الملف مباشرة داخل ال root folder وهو الفولدر الرئيسي للمشروع في حالة أننا لا نستخدم ال src directory ،
+ أو داخل ال src folder لو نستخدم ال src directory ،
+
+فهنكتب بداية كود ال middleware كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(request: NextRequest){
+    console.log('Middleware is called');
+}
+```
+لاحظ أن اسم ال function إجباري أن يكون middleware ،
+
+بهذا الكود فإنه بفتح أي صفحة من المشروع سواء client page أو API route بالمتصفح ، فإنه سيمر أولاً بال middleware وينفذ ال middleware function ثم بعد ذلك يكمل ال request ،
+
+
+
+ولتحديد الصفحات المطلوب تطبيق ال middleware عليها ، هنعمل const config ونحدد فيها عناصر ال matcher array ، كالتالي :
+```ts
+export const config = {
+    matcher: ["/"]
+}
+```
+وهذا يعني أن ال middleware سيتم تطبيقه فقط عند فتح ال Home Page والتى مسارها '/' ،
+
+
+الآن عايزين ال middleware يعمل check على ال token في ال route التالي بال function DELETE : 
+api/profile/[id]/route.ts 
+
+حيث أنه تم نسخ ال كود من function DELETE ليكون ال middleware كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(request: NextRequest){
+    const authToken = request.headers.get('authToken') as string;
+    if(!authToken){
+        return NextResponse.json(
+            {message: 'Not Token Provided, Access Is Denied'},
+            {status: 401} // Unauthorized
+        )
+    }
+}
+
+export const config = {
+    matcher: ["/api/profile/:path*"]
+}
+```
+
+لاحظ أنه تم كتابة *path: بالنهاية المسار ، وهذا يعني أن يتم تطبيق ال middleware على كل ال routes اللي هتيجي بعد profile/ ،
+فلو حذفنا ال route الموجود في ال matcher هيتم تطبيق ال middleware على كل الموقع ، وبالتالي هتلاقي رسالة json طلعت بالصفحة Not Token .... ،
+ويمكن إضافة مسارات أخرى داخل ال matcher array ، 
+
+يمكننا حذف كود التحقق if(!authToken) من function DELETE بقى ، ليصبح كود ال function DELETE كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+import Jwt, { JwtPayload } from 'jsonwebtoken';
+
+interface Props {
+    params: { id: string }
+}
+
+/**
+ * @method  Delete
+ * @route   ~/api/profile/:id
+ * @desc    Delete Profile
+ * @access  private
+ */
+
+
+export async function DELETE(request: NextRequest, {params} : Props){
+    try {
+        const user = await prisma.user.findUnique({ where: {id: parseInt(params.id)}});
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const authToken = request.headers.get('authToken') as string;
+        const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string) as JwtPayload;
+
+        if(userFromToken.id == user.id){
+            await prisma.user.delete({where:{id: parseInt(params.id)}});
+            return NextResponse.json(
+                {message: 'Your Profile Has Been Deleted Successfully'},
+                {status: 200}
+            )
+        }
+
+        return NextResponse.json(
+            {message: 'Only User Can Remove His Profile'},
+            {status: 403} // Forbidden
+        )
+
+        
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+
+ممكن بعد كده يكون عندنا أكتر من method داخل ملف ال route ، ممكن يكون فيه DELETE و GET و PUT وهكذا ،
+فلتحديد method معينة يتم تطبيق ال middleware عليها ، فيتم ذلك من خلال علم check على request.method ، كالتالي : 
+```ts
+if(!authToken && request.method === "DELETE"){
+        return NextResponse.json(
+            {message: 'Not Token Provided, Access Is Denied'},
+            {status: 401} // Unauthorized
+        )
+    }
+```
+
+وبالتالي فإن ال middleware سيتم تطبيقه فقط على DELETE function ، 
+هذا الكود للشرح فقط (request.method) ، 
+ليصبح الكود النهائي لل middleware كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(request: NextRequest){
+    const authToken = request.headers.get('authToken') as string;
+    if(!authToken){
+        return NextResponse.json(
+            {message: 'Not Token Provided, Access Is Denied'},
+            {status: 401} // Unauthorized
+        )
+    }
+}
+
+export const config = {
+    matcher: ["/api/profile/:path*"]
+}
+```
+
+
+----------------------------------------------------------------------------
+
