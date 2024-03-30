@@ -5427,3 +5427,481 @@ export const config = {
 
 ----------------------------------------------------------------------------
 
+
+
+
+
+نتكلم في هذا ال commit عن ال cookie ،
+فبعد أن يقوم المستخدم بعمل login ، فيتم إرجاع token من ال server ، 
+ولعمل تعديل او حذف او اي عملية على أي records فسنحتاج ال token ، 
+
+فلازم علينا تخزين هذا ال token بالمتصفح ، عشان لو تم إغلاق الجهاز أو المتصفح وهكذا ،
+
+فعندنا طريقتين لتخزين ال token :
+الطريقة الأولى : localstorage ،
+فممكن بال formSubmitHander function الموجود في app/(auth)/login/LoginForm.tsx  يتم تخزين ال token بال local storage كالتالي مثلاً : 
+```tsx
+const jwtToken = 'blablabla';
+localStorage.setItem('token', jwtToken);
+```
+وبالتالي تم تخزين ال token بال localStorage ، ولما احتاج ال token في أي request هنجيبه كالتالي : 
+```tsx
+localStorage.getItem('token');
+```
+
+وال Local Storage هو من ضمن ال client أي من ضمن المتصفح ،
+وبالتالي فيمكننا استخدام ال local storage في ال client component ، ولكن لا يمكننا إستخدامه في ال server component ، 
+وأنه في بعض الأحيان هيطلع لنا Hydration Error ،
+
+
+وبالتالي فسنستخدم الطريقة الثانية لتخزين ال token وهي ال Cookie : 
+ففي ال cookie يمكننا التحكم فيها من ال server عادي ، وهي أأمن وأفضل ، فلإستخدام ال cookie علينا التالي : 
+
+تسطيب مكتبة cookie كالتالي : 
+```
+npm i cookie
+```
+
+ثم تسطيب ال types لل cookie لأننا نستخدم typescript كالتالي : 
+```
+npm i @types/cookie -D
+```
+
+
+بعد كده هنروح لملف ال login/ route ونعمل import لل serialize method كالتالي : 
+```ts
+import { serialize } from "cookie";
+```
+
+حيث أن ال serialize هي التى تقوم بعمل cookie ، 
+
+ثم في ال POST قبل كود ال return NextResponse في حالة ال authenticated نقوم بعمل ال cookie كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token);
+```
+
+ونمرر ال cookie هذا في ال headers بإستخدام 'Set-Cookie' كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token);
+
+return NextResponse.json(
+    {message: 'Authenticated'},
+    {
+        status: 200,
+        headers: {'Set-Cookie' : cookie}
+    }
+);
+```
+وبالتالي لو عملنا login بإستخدام ال postman هنلاقي انه رجع cookie به ال token ، 
+ليتم إستخدامه تلقائياً مع أي request ، 
+
+
+
+ولكن ال serialize function لها argument ثالث ، يفضل تحديده وهو options ويحتوي على العديد من العناصر التالية : 
+ال httpOnly وقيمته إما false أو true ، هنخليها true فهو يعطي أمان أكثر لل cookie ، كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token, {
+    httpOnly: true,
+});
+```
+
+ال secure ، وهي تعني أن يكون البروتوكول https وليس http ، فلو فلو كتبنا false فهي تعني http ، 
+فحالياً إحنا في مرحلة ال development والتي نستخدم http بها ، وعايزينها تكون https في حالة ال production  ال development ،
+وبالتالي هنخزن قيمة تساوي production في env ، ونعمل قيمة ال secure أنها تساوي true لو القيمة المخزنة بال env تساوي production ، كالتالي : 
+```
+NODE_ENV=development
+```
+
+```ts
+const cookie = serialize('jwtToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' // development=http, production=https
+});
+```
+
+ال sameSite نخليها 'strict' وهو يعطي أمان أكثر لل cookie ، كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // development=http, production=https
+    sameSite: 'strict',
+});
+```
+
+ال path ، يتم تحديد ال path المطلوب تطبيق ال cookie عليه ، ويمكننا تحديد قيمته ب '/' ليتم التطبيق على الموقع بالكامل ، كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // development=http, production=https
+    sameSite: 'strict',
+    path: '/',
+});
+```
+
+ال maxAge ، وفيه يتم تحديد مدة صلاحية ال cookie بالثواني ، ويمكن إستخدام العمليات الحسابية بداخله ، فيمكن ضرب عدد الثواني في الدقائق في الساعة في اليوم في الشهر ، كالتالي : 
+```ts
+const cookie = serialize('jwtToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // development=http, production=https
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+});
+```
+
+
+
+
+ولأن ال token يرجع بمجرد ال login ويتم إستخدامه تلقائياً مع أي request ، 
+فلا حاجة لإرسال token بإسم authToken في حالة ال DELETE مثلاً ،
+
+وبالتالي في ملف ال api/profile/[id]/route.ts سنقوم بحذف ال const authToken التالي : 
+```
+const authToken = request.headers.get('authToken') as string;
+```
+لأننا سنحصل على ال token من خلال ال cookie كالتالي : 
+```ts
+const jwtToken = request.cookies.get('jwtToken');
+const token = jwtToken?.value as string;
+const userFromToken = Jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
+```
+
+استخدام علامة ? في الكود للسبب التالي : 
+------------------ ChatGPT
+في سياق الكود، استخدام العلامة "?" مع "jwtToken?.value" يتيح التحقق مما إذا كانت القيمة المُرجعة من خاصية "value" في كائن "jwtToken" محددة أم لا. إذا كانت القيمة محددة، فإن العبارة "jwtToken?.value" ستعيد القيمة، أما إذا كانت القيمة غير محددة (undefined)، فإن العبارة "jwtToken?.value" ستعيد قيمة undefined بدلاً من رمي خطأ.
+
+هذا يساعد في تجنب وقوع أخطاء (مثل TypeError) في حالة عدم وجود الخاصية "value" في كائن "jwtToken"، ويسهل التعامل مع القيم غير المحددة بشكل آمن ومنظم في سياق البرنامج.
+------------------ ChatGPT
+
+
+وعلينا كتابة نفس الكود في ال middleware ، بدلاً من ال authToken ليكون كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(request: NextRequest){
+
+    const jwtToken = request.cookies.get('jwtToken');
+    const token = jwtToken?.value as string;
+
+    if(!token){
+        return NextResponse.json(
+            {message: 'Not Token Provided, Access Is Denied'},
+            {status: 401} // Unauthorized
+        )
+    }
+}
+
+export const config = {
+    matcher: ["/api/profile/:path*"]
+}
+```
+
+
+
+ولأن كود ال serialize function الخاص بعمل ال cookie سنحتاجه في register أيضاً ، فيمكننا عمله في ملف موحد في ال utils أو إضافته بملف generateToken.ts ليكون كالتالي : 
+```ts
+import Jwt from "jsonwebtoken";
+import { JWTPayload } from "./types";
+import { serialize } from "cookie";
+
+// Generate JWT Token
+export function generateJWT(jwtPayload: JWTPayload) : string {
+    const privateKey = process.env.JWT_SECRET as string ;
+    const token = Jwt.sign(jwtPayload, privateKey,{
+        expiresIn: '30d'
+    });
+
+    return token;
+}
+
+// Set Cookie With JWT
+export function setCookie(jwtPayload: JWTPayload): string{
+    const token = generateJWT(jwtPayload);
+
+    const cookie = serialize('jwtToken', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // development=http, production=https
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+    });
+
+    return cookie;
+}
+```
+
+لاحظ أنه تم عمل function بإسم setCookie وهنعملها export عشان نستخدمها بعد كده في الملفات التانية ، 
+فقمنا بداخلها بعمل generate لل token في الأول ، ثم قمنا بتخزين ال token في ال cookie بإسم jwtToken ، وال function بالنهاية هترجع cookie .
+
+
+فنقوم الآن بعمل call أي هنادي ال setCookie function بملف ال login/route.ts بإستخدام import كالتالي : 
+```ts
+import { setCookie } from "@/utils/generateToken";
+```
+
+ثم نعمل const cookie من ال setCookie بدلاً من إستخدام ال serialize مباشرة ، ونمرر فيه ال jwtPayload كالتالي : 
+```ts
+const cookie = setCookie(jwtPayload);
+```
+
+وممكن الأفضل إننا نضع عناصر ال jwtPayload مباشرة داخل ال setCookie لتكون كالتالي : 
+```ts
+const cookie = setCookie({
+    id: user.id,
+    username: user.username,
+    isAdmin: user.isAdmin
+});
+
+return NextResponse.json(
+    {message: 'Authenticated'},
+    {
+        status: 200,
+        headers: {'Set-Cookie' : cookie}
+    }
+);
+```
+
+
+هنحتاج نعمل ال setCookie أيضاً في ال register/route.ts ، ليكون كالتالي : 
+```ts
+import prisma from "@/utils/db";
+import { RegisterUserDto } from "@/utils/dtos";
+import { registerUserSchema } from "@/utils/validationSchemas";
+import { NextRequest, NextResponse } from "next/server";
+import bcrypt from 'bcryptjs';
+import { setCookie } from "@/utils/generateToken";
+
+/**
+ * @method  POST
+ * @route   ~/api/register
+ * @desc    Create New Account [ (register) || (sign-up) || (إنشاء حساب) ]
+ * @access  public
+ */
+
+
+export async function POST(request: NextRequest){
+    try {
+        const body = await request.json() as RegisterUserDto;
+        const validation = registerUserSchema.safeParse(body);
+
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            );
+        }
+
+        const user = await prisma.user.findUnique({where:{email: body.email}});
+        if(user){
+            return NextResponse.json(
+                { message: 'This User is already registered' },
+                { status: 400 }
+            )
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(body.password, salt);
+        const newUser = await prisma.user.create({
+            data:{
+                username: body.username,
+                email: body.email,
+                password: hashedPassword
+            },
+            select:{
+                username: true,
+                id: true,
+                isAdmin: true
+            }
+        })
+
+        const cookie = setCookie({
+            id: newUser.id,
+            username: newUser.username,
+            isAdmin: newUser.isAdmin
+        });
+
+        return NextResponse.json(
+            {...newUser, message: "Registered & Authenticated"}, 
+            { 
+                status:201,
+                headers:{ "Set-Cookie": cookie } 
+            });
+    } catch (error) {
+        return NextResponse.json(
+            { message: 'Internal Server Error' },
+            { status: 500 }
+        );
+    }
+}
+```
+
+
+
+علينا الآن عمل Log Out ، بمعنى أن المستخدم قد يريد أن يخرج من حسابه ويعمل logout ، وبالتالي فعلينا مسح ال cookie ، ليتم الخروج من حسابه ،
+فهنعمل ملف route.ts جديد داخل فولدر بإسم logout داخل ال api/(auth) ،
+
+هنكتب الأكواد الأساسية في ال route.ts والخاصة بعمل import لل request وال response وال documentation وال function لتكون كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+/**
+ * @method  GET 
+ * @route   ~/api/logout
+ * @desc    Logout User [(Sign-out) (تسجيل خروج)]
+ * @access  public
+ */
+
+export function GET(request: NextRequest){
+    try {
+        // Code ...
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+فعشان نمسح ال cookie هنعمل import لل cookie الموجودة في next/headers كالتالي : 
+```ts
+import { cookies } from "next/headers";
+```
+
+ثم نقوم بحذف ال cookie التي بإسم jwtToken والتى كنا قد أنشأناها ، كالتالي : 
+```ts
+export function GET(request: NextRequest){
+    try {
+        cookies().delete("jwtToken");
+        return NextResponse.json(
+            {message: 'Logout'},
+            {status: 200}
+        );
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+وبالتالي هنعمل request جديد في ال postman ، هنلاقي رجع رسالة Logout ،
+
+
+بالنسبة لكود ال jwt.verify ، فيمكننا نقله في ملف موحد أفضل ، لأننا سنحتاجه في أماكن اخري بهذا المشروع ،
+```ts
+const jwtToken = request.cookies.get('jwtToken');
+const token = jwtToken?.value as string;
+const userFromToken = Jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
+```
+
+فهنعمل ملف جديد بإسم verifyToken.ts داخل ال utils ، ليكون كالتالي : 
+```ts
+import Jwt from 'jsonwebtoken';
+import { NextRequest } from "next/server";
+import { JWTPayload } from "./types";
+
+export function verifyToken(request: NextRequest) : JWTPayload | null{
+    try {
+        const jwtToken = request.cookies.get('jwtToken');
+        const token = jwtToken?.value as string;
+        if(!token) return null;
+
+        const privateKey = process.env.JWT_SECRET as string;
+        const userPayload = Jwt.verify(token, privateKey) as JWTPayload;
+        return userPayload;
+    } catch (error) {
+        return null;
+    }
+}
+```
+
+فوظيفة هذا ال function أن يفتح تشفير ال token ، ويعمل له verify ، فبأي مكان بالمشروع لو محتاج عمل verify لل token ، هنعمل import و call لل function ، 
+هناخل ال jwtToken من ال cookie ، وفي هذا ال cookie هناخد منه ال token ، فلو لم يكن ال token موجود هنرجع null ، 
+وإلا هنكمل ونستعيد قيمة ال private key من ال env ، 
+ثم نعمل verify لل token بمقارنة ال token مع ال private key ، 
+ولو كله تمام هنرجع userPayload ،
+
+
+هنستخدم هذا ال function كالتالي : في ملف profile/[id]/route.ts بال DELETE function 
+هنعمل import ل verifyToken كالتالي : 
+```ts
+import { verifyToken } from "@/utils/verifyToken";
+```
+
+ثم هنمسح الأكواد التالية : 
+```ts
+const jwtToken = request.cookies.get('jwtToken');
+const token = jwtToken?.value as string;
+const userFromToken = Jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
+```
+
+
+ ثم هنعمل ال const userFromToken لتصبح كالتالي : 
+```ts
+const userFromToken = verifyToken(request);
+```
+
+بعد كده هنعمل check لو ال userFromToken لا تساوي null ، و userFromToken.id تساوي user.id فيتم الحذف بنجاح ، ليكون الكود كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+import Jwt, { JwtPayload } from 'jsonwebtoken';
+import { verifyToken } from "@/utils/verifyToken";
+
+interface Props {
+    params: { id: string }
+}
+
+/**
+ * @method  Delete
+ * @route   ~/api/profile/:id
+ * @desc    Delete Profile
+ * @access  private
+ */
+
+
+export async function DELETE(request: NextRequest, {params} : Props){
+    try {
+        const user = await prisma.user.findUnique({ where: {id: parseInt(params.id)}});
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const userFromToken = verifyToken(request);
+
+        if(userFromToken !== null && userFromToken.id == user.id){
+            await prisma.user.delete({where:{id: parseInt(params.id)}});
+            return NextResponse.json(
+                {message: 'Your Profile Has Been Deleted Successfully'},
+                {status: 200}
+            )
+        }
+
+        return NextResponse.json(
+            {message: 'Only User Can Remove His Profile'},
+            {status: 403} // Forbidden
+        )
+
+        
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+وهنا يمكننا عمل check بال postman لل register وال login وال logout وال delete functions ، سنجد أن كل شئ على ما يرام .
+
+
+
+----------------------------------------------------------------------------
+
+
+

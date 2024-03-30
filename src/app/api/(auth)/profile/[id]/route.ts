@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/utils/db";
 import Jwt, { JwtPayload } from 'jsonwebtoken';
+import { verifyToken } from "@/utils/verifyToken";
 
 interface Props {
     params: { id: string }
@@ -24,10 +25,9 @@ export async function DELETE(request: NextRequest, {params} : Props){
             )
         }
 
-        const authToken = request.headers.get('authToken') as string;
-        const userFromToken = Jwt.verify(authToken, process.env.JWT_SECRET as string) as JwtPayload;
+        const userFromToken = verifyToken(request);
 
-        if(userFromToken.id == user.id){
+        if(userFromToken !== null && userFromToken.id == user.id){
             await prisma.user.delete({where:{id: parseInt(params.id)}});
             return NextResponse.json(
                 {message: 'Your Profile Has Been Deleted Successfully'},
