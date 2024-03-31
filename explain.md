@@ -5905,3 +5905,188 @@ export async function DELETE(request: NextRequest, {params} : Props){
 
 
 
+
+في هذا ال commit هنعمل GET route handler وال PUT route handler لل user profile ،
+فبنفس ملف ال api/(auth)/profile/[id]/route.ts هنعمل ال GET وال PUT أيضاً ،
+
+فستكون ال GET كالتالي : 
+```ts
+/**
+ * @method  GET
+ * @route   ~/api/profile/:id
+ * @desc    Get Profile By Id
+ * @access  private
+ */
+export async function GET(request : NextRequest, {params} : Props){
+    try {
+        const user = await prisma.user.findUnique({where: {id: parseInt(params.id)}});
+
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const userFromToken = verifyToken(request);
+        if(userFromToken === null || userFromToken.id != user.id){
+            return NextResponse.json(
+                {message: 'You Are Not Allowed, Access Denied'},
+                {status: 403}
+            )
+        }
+
+        return NextResponse.json(user, {status: 200});
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+هنعمل request جديد بال postman بإسم show بال route التالي : 
+```
+{{DOMAIN}}/api/profile/13
+```
+وبال GET method ، سنجد أنه قام بإرجاع بيانات ال user ، 
+سنجد أيضاً أنه تم إرجاع ال password المشفر مع البيانات اللي رجعت ، 
+ولتحديد البيانات اللي عايزين نحصل عليها من ال user ، من خلال select بال prisma في ال const user ليكون كالتالي : 
+```ts
+const user = await prisma.user.findUnique({
+    where: {id: parseInt(params.id)},
+    select:{
+        id: true,
+        email: true,
+        username: true,
+        createdAt: true,
+        isAdmin: true
+    }
+});
+```
+وبالتالي فإن ال properties المحددة فقط هي اللي هترجع ، 
+
+
+
+بعد كده نعمل ال PUT route handler ، واللي هتكون الأكواد الأوليه له كالتالي : 
+```ts
+
+/**
+ * @method  PUT
+ * @route   ~/api/profile/:id
+ * @desc    Update Profile By Id
+ * @access  private
+ */
+export async function PUT(request : NextRequest, {params} : Props){
+    try {
+        const user = await prisma.user.findUnique({where: {id: parseInt(params.id)}});
+
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const userFromToken = verifyToken(request);
+        if(userFromToken === null || userFromToken.id != user.id){
+            return NextResponse.json(
+                {message: 'You Are Not Allowed, Access Denied'},
+                {status: 403}
+            )
+        }
+
+        // Code of updating user data ....
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+ثم بعد ذلك هنجيب البيانات اللي المستخدم بعتها بال request كالتالي : 
+```ts
+const body = await request.json();
+```
+ولكن هذه البيانات من نوع any ، وبالتالي علينا تحديد بيانات حقول ال request من خلال إنشاء Dto جديد بملف ال utils/dtos.ts كالتالي : 
+```ts
+export interface UpdateUserDto{
+    username?: string;
+    email?: string;
+    password?: string;
+}
+```
+وطبعاً لأن الحقول المعدلة هتكون إختياري فتم وضع علامة ال ? ، بمعنى أن المستخدم قد يريد تعديل اليوزرنيم ولا يريد تعديل الإيميل ، وهكذا ...
+
+بعد كده هنعمل Import لل Dto كالتالي : 
+```ts
+import { UpdateUserDto } from "@/utils/dtos";
+```
+ثم نحدد نوع ال const body ك UpdateUserDto كالتالي : 
+```ts
+const body = await request.json() as UpdateUserDto ;
+```
+
+فبعد أن تم إحضار بيانات ال user المسجلة بال database ، وتم إحضار البيانات المستلمة من المستخدم بحقول التعديل ، 
+فسنقوم بإستخدام prisma update function لتنفيذ تعديل البيانات كالتالي : 
+```ts
+const body = await request.json() as UpdateUserDto ;
+
+const updatedUser = await prisma.user.update({
+    where: {id: parseInt(params.id)},
+    data:{
+        username: body.username,
+        email: body.email,
+        password: body.password
+    }
+});
+
+return NextResponse.json( updatedUser, {status: 200});
+```
+
+ولكن عندنا مشكلة في الكود السابق ، وهو تشفير ال password ، بمعنى إننا لازم نشفر ال password لو هيتم تعديله ، ولو لم يتم تعديله فلن نفعل شئ به ،
+ويتم ذلك أولاً من خلال عمل import لل bcrypt.js كالتالي : 
+```ts
+import bcrypt from 'bcryptjs';
+```
+
+ثم هنعمل كود من خلاله هنتحقق لو يوجد password مرسل في ال body ، فهيتم تشفير ال body.password وإرساله ، كالتالي : 
+```ts
+const body = await request.json() as UpdateUserDto ;
+
+if(body.password){
+    const salt = await bcrypt.genSalt(10);
+    body.password = await bcrypt.hash(body.password, salt);
+}
+const updatedUser = await prisma.user.update({
+    where: {id: parseInt(params.id)},
+    data:{
+        username: body.username,
+        email: body.email,
+        password: body.password
+    }
+});
+```
+
+هنعمل request جديد بال postman بنوع PUT بإسم update بال route التالي : 
+```
+{{DOMAIN}}/api/profile/13
+```
+ونقوم فيها بتعديل البيانات كما نريد ، 
+
+سنجد أنه يتم إرجاع ال password مع البيانات اللي راجعة ، وبالتالي يمكننا إستخدام ال prisma select لتحديد البيانات اللي هترجع ،
+أو ممكن نستخدم الطريقة الإعتيادية لل javascript كالتالي : 
+```ts
+const {password, ...other} = updatedUser;
+return NextResponse.json( {...other}, {status: 200});
+```
+وهذا يعني أن يتم إرجاع كل ال properties ماعدا ال password .
+
+----------------------------------------------------------------------------
+
+
