@@ -6090,3 +6090,290 @@ return NextResponse.json( {...other}, {status: 200});
 ----------------------------------------------------------------------------
 
 
+
+في هذا ال commit هنعمل ال comment route
+لأننا عندنا Article وله Comments ، 
+وكنا عملنا ال Comment Model في ملف ال schema.prisma كالتالي : 
+```prisma
+model Comment{
+  id Int @id @default(autoincrement())
+  text String
+  createdAt DateTime @default(now())
+  updatedAt DateTime  @updatedAt
+  articleId Int
+  userId Int
+
+  // One-To-Many Relation between Article & Comment
+  article Article @relation(fields: [articleId], references: [id])
+
+  // One-To-Many Relation between User & Comment
+  user  User @relation(fields: [userId], references: [id])
+}
+```
+
+أولاً هنعمل فولدر جديد بإسم comments داخل ال api ، وداخله route.ts ، 
+هنعمل import لل request , response ،
+بعد كده هنعمل ال documentation ، وهنجهز الكود كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+
+/**
+ * @method  POST
+ * @route   ~/api/comments
+ * @desc    Create A New Article
+ * @access  private (Only Logged-In Users)
+*/
+
+export function POST(request: NextRequest){
+    try {
+        // Code ...
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+بعد كده عايزين نعمل verify لل Token ونشوف هل هذا ال user عنده token أي مسجل دخول ولا لأ ، 
+وذلك من خلال عمل import لل verifyToken اللي عملناها في ال utils ، واللي كانت بترجع إما ال payload أو null ، فكانت كالتالي للتذكرة :
+```ts
+import Jwt from 'jsonwebtoken';
+import { NextRequest } from "next/server";
+import { JWTPayload } from "./types";
+
+export function verifyToken(request: NextRequest) : JWTPayload | null{
+    try {
+        const jwtToken = request.cookies.get('jwtToken');
+        const token = jwtToken?.value as string;
+        if(!token) return null;
+
+        const privateKey = process.env.JWT_SECRET as string;
+        const userPayload = Jwt.verify(token, privateKey) as JWTPayload;
+        return userPayload;
+    } catch (error) {
+        return null;
+    }
+}
+```
+
+عشان نستخدمها في ال api/comments/route.ts هنعمل import لها كالتالي :  
+```ts
+import { verifyToken } from "@/utils/verifyToken";
+```
+
+ثم نستخدمها بتمرير ال request لها ، وإما هترجع لنا null فيعني أن ال user ليس له token ، وإما هترجع ال payload ، كالتالي : 
+
+```ts
+try {
+        const user = verifyToken(request);
+
+        if(!user){
+            return NextResponse.json(
+                {message: 'Only Logged-in Users Can Access'},
+                {status: 401}
+            )
+        }
+    }
+```
+بعد كده ، هناخد البيانات اللي جاية من حقول الإدخال ، كالتالي : 
+```ts
+const body = await request.json();
+```
+
+ولكن كالعادة ، فهذا ال body من نوع any ، 
+فعلينا كتابة Dto لل create comment بملف ال utils/dtos.ts ، ليكون كالتالي : 
+```ts
+export interface CreateCommentDto{
+    text: string;
+    articleId: number;
+}
+```
+
+بعد كده هنعرف ال const body انه من نوع CreateCommentDto ، عن طريق عمل import ثم استخدامها كالتالي : 
+```ts
+import { CreateCommentDto } from "@/utils/dtos";
+```
+
+```ts
+const body = await request.json() as CreateCommentDto;
+```
+
+بعد كده هنعمل validation بملف ال utils/validationSchema.ts كالتالي : 
+```ts
+// Create Comment Schema
+export const createCommentSchema = z.object({
+    text: z.string().min(2).max(50),
+    articleId: z.number(),
+});
+```
+
+بعد كده هنطبق ال validation على البيانات اللي جاية من ال body كالتالي : 
+```ts
+const body = await request.json() as CreateCommentDto;
+
+const validation = createCommentSchema.safeParse(body);
+if(!validation.success){
+    return NextResponse.json(
+        {message: validation.error.errors[0].message},
+        {status: 400}
+    )
+}
+```
+
+فلو ال validation تحقق بنجاح ، سيتم إنشاء ال comment بإستخدام prisma.create كالتالي : 
+```ts
+const newComment = await prisma.comment.create({
+    data: {
+        text: body.text,
+        articleId: body.articleId,
+        userId: user.id
+    }
+});
+
+return NextResponse.json(newComment, {status: 201});
+```
+
+ليكون الكود كاملاً بالنهاية هكذا : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+import { verifyToken } from "@/utils/verifyToken";
+import { CreateCommentDto } from "@/utils/dtos";
+import { createCommentSchema } from "@/utils/validationSchemas";
+
+/**
+ * @method  POST
+ * @route   ~/api/comments
+ * @desc    Create A New Article
+ * @access  private (Only Logged-In Users)
+*/
+
+export async function POST(request: NextRequest){
+    try {
+        const user = verifyToken(request);
+
+        if(!user){
+            return NextResponse.json(
+                {message: 'Only Logged-in Users Can Access'},
+                {status: 401}
+            )
+        }
+
+        const body = await request.json() as CreateCommentDto;
+
+        const validation = createCommentSchema.safeParse(body);
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            )
+        }
+
+        const newComment = await prisma.comment.create({
+            data: {
+                text: body.text,
+                articleId: body.articleId,
+                userId: user.id
+            }
+        });
+
+        return NextResponse.json(newComment, {status: 201});
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+ننتقل بعد ذلك لل postman و نعمل فولدر جديد بإسم comments ، وداخله request جديد من نوع POST بال route التالي : 
+```
+{{DOMAIN}}/api/comments
+```
+
+ثم من خلال raw هندخل بيانات كالتالي : 
+```json
+{
+    "text": "This is 1st Comment",
+    "articleId": 1
+}
+```
+
+هنجد أنه تم إضافة ال comment بنجاح ، ولو لم يتم عمل login لل user هيطلع رسالة "Only Logged-in Users Can Access" ، 
+
+
+
+بعد كده هنعمل GET route handler لل comment بنفس ال route.ts ، ليكون كالتالي :  
+```ts
+/**
+ * @method  GET
+ * @route   ~/api/comments
+ * @desc    Get All Comments
+ * @access  private (Only Admins)
+*/
+
+export async function GET(request: NextRequest){
+    try {
+        const user = verifyToken(request);
+
+        if(user === null || user.isAdmin === false){
+            return NextResponse.json(
+                {message: 'Only Admins Can Access'},
+                {status: 401}
+            )
+        }
+
+        const comments = await prisma.comment.findMany();
+        return NextResponse.json(comments, {status: 200});
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+بعد كده هنعمل request جديد بال postman بنوع GET بال route التالي : 
+```
+{{DOMAIN}}/api/comments
+```
+
+ليقوم بعرض كل ال comments الموجودة عندي ، 
+وخد بالك إننا عملنا شرط أن يكون ال user عبارة عن admin ، يعنى ال isAdmin = true ، 
+فهنضطر نعدل قيمة ال isAdmin من ال prisma studio مباشرة لل user اللي هنعمل بيه login في ال postman ، 
+وبعد كده هنلاقي إنه تم عرض مل ال comments ، 
+
+
+
+** خد بالك عندنا خطأ في حاجة ، اللي هي تعديل بيانات ال user ،
+المفترض إن ال validation عند إنشاء user جديد أن يكون الباسورد اقل حاجة له هو 6 ارقام ،
+
+ولكن عند التعديل ، هذا الشرط غير شغال ، لأننا مش حددناه ،
+وبالتالي يمكننا تحديد الشرط ، ممكن بإستخدام ملف ال validationSchema.ts ككل مرة ،
+ولكن هذه المرة هنستخدم شرط if عادي في api/(auth)/profile/[id]/route.ts بال function PUT ، ليكون الكود كالتالي : 
+```ts
+// Code of update user data ....
+const body = await request.json() as UpdateUserDto ;
+
+if(body.password){
+    if(body.password.length < 6){
+        return NextResponse.json(
+            {message: 'Password length must be 6 characters at least'},
+            {status: 400}
+        )
+    }
+    const salt = await bcrypt.genSalt(10);
+    body.password = await bcrypt.hash(body.password, salt);
+}
+```
+
+
+----------------------------------------------------------------------------
+
+
