@@ -6377,3 +6377,221 @@ if(body.password){
 ----------------------------------------------------------------------------
 
 
+
+في هذا ال commit هنعمل ال update وال delete لل comment ، من خلال ال PUT, DELETE route handler ،
+
+فهنعمل دلوقتى فولدر بإسم [id] داخل ال api/comments ، وداخل هذا الفولدر هنعمل route.ts كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+
+interface Props{
+    params: {id: string}
+}
+
+/**
+ * @method  PUT
+ * @route   ~/api/comments/:id
+ * @desc    Update Comment By Id
+ * @access  private (only the writer of this comment)
+ */
+export async function PUT(request: NextRequest, {params}: Props){
+    try {
+        const comment = await prisma.comment.findUnique({
+            where: {id: parseInt(params.id)}
+        });
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+حيث أننا حضرنا ال comment من قاعدة البيانات بإستخدام ال prisma ، 
+
+بعد كده هنتحقق من ال comment لو مش موجود هنرجع رسالة انه غير موجود ، كالتالي : 
+```ts
+if(!comment){
+    return NextResponse.json(
+        {message: 'This Comment Is Not Found'},
+        {status: 404}
+    )
+}
+```
+
+فلو كله تمام وال comment موجود ، فهنعمل verify لل token عشان نشوف إن ال user عنده صلاحية للتعديل على هذا ال comment أم لا ، كالتالي : 
+```ts
+const user = verifyToken(request);
+if(user === null || user.id !== comment.userId){
+    return NextResponse.json(
+        {message: 'You Are Not Allowed'},
+        {status: 403}
+    )
+}
+```
+
+فلو كل شئ تمام كده ، هنسمح للمستخدم بعمل تعديل لل comment ، وذلك من خلال الحصول على البيانات اللي دخلها ال user الأول ، كالتالي : 
+```ts
+const body = await request.json();
+```
+
+ولكن هذا ال body حالياً من نوع any فهنعمل Dto له بملف ال utils/dtos.ts كالتالي : 
+```ts
+export interface UpdateCommentDto{
+    text: string;
+}
+```
+
+فهنعمل import لل UpdateCommentDto لإستخدامها كالتالي : 
+```ts
+import { UpdateCommentDto } from "@/utils/dtos";
+.
+.
+.
+const body = await request.json() as UpdateCommentDto;
+```
+
+ثم نقوم بكتابة كود ال update بإستخدام ال prisma ، وهنرجع ايضاً البيانات اللي تعدلت ، كالتالي : 
+```ts
+const updatedComment = await prisma.comment.update({
+    where: {id: parseInt(params.id)},
+    data: {
+        text: body.text
+    }
+});
+
+return NextResponse.json(updatedComment,{status: 200});
+```
+
+ليكون الكود بالنهاية كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+import { verifyToken } from "@/utils/verifyToken";
+import { UpdateCommentDto } from "@/utils/dtos";
+
+interface Props{
+    params: {id: string}
+}
+
+/**
+ * @method  PUT
+ * @route   ~/api/comments/:id
+ * @desc    Update Comment By Id
+ * @access  private (only the writer of this comment)
+ */
+export async function PUT(request: NextRequest, {params}: Props){
+    try {
+        const comment = await prisma.comment.findUnique({
+            where: {id: parseInt(params.id)}
+        });
+
+        if(!comment){
+            return NextResponse.json(
+                {message: 'This Comment Is Not Found'},
+                {status: 404}
+            )
+        }
+
+        const user = verifyToken(request);
+        if(user === null || user.id !== comment.userId){
+            return NextResponse.json(
+                {message: 'You Are Not Allowed'},
+                {status: 403}
+            )
+        }
+
+        const body = await request.json() as UpdateCommentDto;
+        const updatedComment = await prisma.comment.update({
+            where: {id: parseInt(params.id)},
+            data: {
+                text: body.text
+            }
+        });
+
+        return NextResponse.json(updatedComment,{status: 200});
+
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+
+بعد كده هنعمل request جديد بال postman ، من نوع put بإسم update بال route التالي : 
+```
+{{DOMAIN}}/api/comments/1
+```
+هنلاقي كله تمام ، وأن التعديل لازم يكون من خلال ال user صاحب ال comment .
+
+
+
+
+بعد كده عايزين نعمل ال DELETE route handler كالتالي : 
+```ts
+/**
+ * @method  DELETE
+ * @route   ~/api/comments/:id
+ * @desc    Delete Comment By Id
+ * @access  private (only Admin or the writer of this comment)
+ */
+export async function DELETE(request: NextRequest, {params}: Props){
+    try {
+        const comment = await prisma.comment.findUnique({
+            where: {id: parseInt(params.id)}
+        });
+
+        if(!comment){
+            return NextResponse.json(
+                {message: 'This Comment Is Not Found'},
+                {status: 404}
+            )
+        }
+
+        const user = verifyToken(request);
+        if(user === null){
+            return NextResponse.json(
+                {message: 'No Token Provided, Access Denied'},
+                {status: 401}
+            )
+        }
+
+        if(user.isAdmin || user.id === comment.userId){
+            await prisma.comment.delete({
+                where: {id: parseInt(params.id)}
+            });
+
+            return NextResponse.json(
+                {message: 'Comment Deleted Successfully'},
+                {status: 200}
+            )
+        }
+
+        // In case of user not admin, and not the writer of the comment
+        return NextResponse.json(
+            {message: 'You Are Not Allowed'},
+            {status: 403}
+        )
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+بعد كده هنعمل request جديد بال postman ، من نوع delete بإسم delete بال route التالي : 
+```
+{{DOMAIN}}/api/comments/1
+```
+هنلاقي كله تمام ، وأن الحذف لازم يكون من خلال ال user صاحب ال comment أو من الأدمن .
+
+
+----------------------------------------------------------------------------
+
+
