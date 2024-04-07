@@ -6595,3 +6595,209 @@ export async function DELETE(request: NextRequest, {params}: Props){
 ----------------------------------------------------------------------------
 
 
+
+في هذا ال commit هنعمل ال Pagination ، بمعنى ترقيم الصفحات ،
+عشان هنطبق عال articles page فهنضيف اكثر من 20 article بقاعدة البيانات بجدول articles ، 
+ممكن من خلال postman او prisma studio او phpMyAdmin ، 
+
+ففي صفحة ال aritcles هنبعت ال api ليتم عرض كل ال articles الخاصة بنا ،
+فاحنا عايزين نعمل pagination بحيث كل صفحة يتم عرض 6 articles بها ، 
+
+فخد بالك اننا هنستعمل query string لتحديد رقم الصفحة بال route 
+فمثلاً  domain/articles?pageNumber=2 ، وهكذا ،
+فهنا تم ارسال request لل server بأن يجلب بيانات ال articles كلها ، الخاصة بالصفحة الثانية ،
+ولكن علينا أيضاً تحديد عدد ال articles في الصفحة الواحدة ليحدد ال articles بالضبط ،
+
+فلعمل كل هذا : هندخل على ال api/articles/route.ts عند ال GET method ، والذي يتم عرض كل ال articles من خلالها ، والتعديل عليها ،
+حيث أنها قبل التعديل كانت كالتالي : 
+```ts
+/**
+ * @method  GET
+ * @route   ~/api/articles
+ * @desc    Get All Articles
+ * @access  public
+ */
+export async function GET(request: NextRequest) {
+    try {
+        const articles = await prisma.article.findMany();
+        return NextResponse.json(articles, {status: 200});
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+فللحصول على قيمة ال query string من ال link ، يتم ذلك بإستخدام التالي : 
+```ts
+request.nextUrl.searchParams.get('query_string_name');
+```
+
+فهنا عايزين نعمل query string بإسم pageNumber ، كالتالي : 
+```ts
+const pageNumber = request.nextUrl.searchParams.get('pageNumber');
+console.log(pageNumber);
+```
+
+هنروح بعد كده للكود الخاص بجلب ال articles التالي : 
+```ts
+const articles = await prisma.article.findMany();
+```
+فال findMany بتجيب لنا كل ال articles ، يمكننا تحديد بعض الشروط بال findMany كالتالي : 
+```ts
+const articles = await prisma.article.findMany({
+    skip: 0,
+    take: 6
+});
+```
+وهذا يعنى أن يتم الحصول على كل ال articles ولكن يترك ال article صفر ، ثم يعرض ال 6 articles التالية للصفر ، 
+وهذا تعنى الصفحة الأولي ، فبو عايزين الصفحة الثانية ستكون كالتالي : 
+```ts
+const articles = await prisma.article.findMany({
+    skip: 6,
+    take: 6
+});
+```
+ولكن طبعاً قيم ال skip وال take لابد أن تكون dynamic ، 
+فاحنا عملنا const pageNumber ، هنعمل const ARTICLES_PER_PAGE كالتالي : 
+```ts
+const pageNumber = request.nextUrl.searchParams.get('pageNumber');
+const ARTICLES_PER_PAGE = 6;
+
+const articles = await prisma.article.findMany({
+    skip: 6,
+    take: ARTICLES_PER_PAGE
+});
+```
+
+وبالنسبة لقيمة skip ، فالمفترض انها تساوي : 
+```ts
+skip: ARTICLES_PER_PAGE * ( pageNumber - 1),
+```
+ولكن هنلاقي خطأ بال ts بنوع ال pageNumber ، لأن المفترض قيمتها تكون string ، واحنا بنستخدمها في عملية حسابية ك number ، 
+وبالتالي فعلينا تحويلها ل integer كالتالي : 
+```ts
+skip: ARTICLES_PER_PAGE * ( parseInt(pageNumber) - 1),
+```
+
+هنلاقي خطأ تانى ، بال ts كالتالي : 
+Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.ts(2345)
+وهو يعنى أن ال pageNumber قد يكون null ، 
+فلهذا هنروح لل const pageNumber ، ونضيف "1" في حالة null ، ولاحظ أن "1" ستكون string وليست integer ، كالتالي : 
+```ts
+const pageNumber = request.nextUrl.searchParams.get('pageNumber') || "1";
+```
+
+فبالمستقبل لونريد زيادة عدد ال articles بالصفحة ، فيمكننا تعديل قيمة ال const ARTICLES_PER_PAGE ، 
+ولكن للتسهيل والتنظيم ، هنعمل ملف خاص بال constants داخل ال utils بإسم constants.ts ونخزن فيه ال const ARTICLES_PER_PAGE ، كالتالي : 
+```ts
+export const ARTICLES_PER_PAGE = 6;
+```
+ونعمل له import بال articles/route.ts لإستخدامه في ال GET method ليكون الكود بالنهاية كالتالي : 
+```ts
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/utils/db";
+import { ARTICLES_PER_PAGE } from "@/utils/constants";
+
+
+/**
+ * @method  GET
+ * @route   ~/api/articles
+ * @desc    Get All Articles By Page Number
+ * @access  public
+ */
+export async function GET(request: NextRequest) {
+    try {
+        const pageNumber = request.nextUrl.searchParams.get('pageNumber') || "1";
+
+        const articles = await prisma.article.findMany({
+            skip: ARTICLES_PER_PAGE * ( parseInt(pageNumber) - 1),
+            take: ARTICLES_PER_PAGE
+        });
+        return NextResponse.json(articles, {status: 200});
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+
+------------
+
+بنفس ملف ال route.ts بال POST method ، احنا كنا عاملين ال POST method يكون public ، بمعنى ان أي شخص يقدر يعمل article جديد ، 
+ولكننا نريد يكون متاح فقط لل admin ، 
+حيث أن الكود كان كالتالي : 
+```ts
+/**
+ * @method  POST
+ * @route   ~/api/articles
+ * @desc    Create A New Article
+ * @access  public
+*/
+export async function POST(request: NextRequest){
+    try{
+        const body = await request.json() as CreateArticleDto;
+
+        const validation = createArticleSchema.safeParse(body);
+    
+        if(!validation.success){
+            return NextResponse.json({message: validation.error.errors[0].message}, {status: 400});
+        }
+    
+        const newArticle:Article = await prisma.article.create({
+            data:{
+                title: body.title,
+                description: body.description
+            }
+        })
+        return NextResponse.json(newArticle, {status:201});
+    }catch(error){
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+وبالتالي علينا أننا ناخد ال token من المستخدم ونعمل verify لل token ، ونتحقق هل هو admin أم لا ، وذلك من خلال verifyToken function اللى أنشأناها من قبل ، كالتالي : 
+```ts
+try{
+        const user = verifyToken(request);
+        if(user === null || user.isAdmin === false){
+            return NextResponse.json(
+                {message: 'Only Admin Can Create Article'},
+                {status: 403}
+            )
+        }
+
+        const body = await request.json() as CreateArticleDto;
+
+        const validation = createArticleSchema.safeParse(body);
+    
+        if(!validation.success){
+            return NextResponse.json({message: validation.error.errors[0].message}, {status: 400});
+        }
+    
+        const newArticle:Article = await prisma.article.create({
+            data:{
+                title: body.title,
+                description: body.description
+            }
+        })
+        return NextResponse.json(newArticle, {status:201});
+    }catch(error){.........etc.......}
+```
+
+هنعمل نفس الحاجة في ال PUT method وال DELETE method ليكون تعديل ال Article فقط من خلال ال admin .
+
+
+----------------------------------------------------------------------------
+
+
