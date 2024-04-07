@@ -6801,3 +6801,178 @@ try{
 ----------------------------------------------------------------------------
 
 
+
+في هذا ال commit هنشتغل على ال Get Single Article ،
+ففي كل article يوجد له بعض التعليقات ،
+فالمفترض لما ارجع article معين ، يتم إرجاع ال comments الخاصة بهذا ال article معه بنفس ال response ،
+
+فأولاً لابد أن يكون هناك علاقة بين الجدولين ، وهو ماتم تنفيذه بالفعل في ال schema.prisma ،
+
+ثم بعد ذلك ، بكود ال prisma الخاص بجلب بيانات ال article بإستخدام findUnique نستخدم بداخلها include كالتالي : 
+```ts
+const article = await prisma.article.findUnique({
+    where:{id: parseInt(params.id)},
+    include:{
+        comments:true,
+    }
+});
+```
+
+وبالتالي لما نروح لل postman ونجيب بيانات ال article هيجي مع ال comments بتاعته كالتالي : 
+```json
+{
+    "id": 4,
+    "title": "this is title 1",
+    "description": "Next.js is a framework",
+    "createdAt": "2024-04-06T21:52:53.032Z",
+    "updatedAt": "2024-04-06T21:52:53.032Z",
+    "comments": [
+        {
+            "id": 2,
+            "text": "comment 1",
+            "createdAt": "2024-04-07T13:02:45.825Z",
+            "updatedAt": "2024-04-07T13:02:01.719Z",
+            "articleId": 4,
+            "userId": 1
+        },
+        {
+            "id": 3,
+            "text": "comment 2",
+            "createdAt": "2024-04-07T13:03:11.588Z",
+            "updatedAt": "2024-04-07T13:02:50.514Z",
+            "articleId": 4,
+            "userId": 1
+        },
+        {
+            "id": 4,
+            "text": "comment 3",
+            "createdAt": "2024-04-07T13:03:25.260Z",
+            "updatedAt": "2024-04-07T13:03:14.779Z",
+            "articleId": 4,
+            "userId": 1
+        }
+    ]
+}
+```
+
+وللتحكم بترتيب ال comments بحيث يتم وضع آخر comment بالأعلي مثلاً سيكون كالتالي : 
+```ts
+const article = await prisma.article.findUnique({
+    where:{id: parseInt(params.id)},
+    include:{
+        comments:{
+            orderBy:{
+                createdAt: 'desc'
+            }
+        }
+    }
+});
+```
+
+وخد بالك أن كل comment له user ، وهذا ال user له علاقة بجدول ال users ، فيمكننا جلب بيانات ال user أيضاً بنفس الطريقة داخل ال comments كالتالي : 
+```ts
+const article = await prisma.article.findUnique({
+            where:{id: parseInt(params.id)},
+            include:{
+                comments:{
+                    orderBy:{
+                        createdAt: 'desc'
+                    },
+                    include:{
+                        user: true
+                    }
+                }
+            }
+        });
+```
+
+وبالتالي هيرجع كل بيانات ال user مع كل comment كالتالي : 
+```json
+{
+    "id": 4,
+    "title": "this is title 1",
+    "description": "Next.js is a framework",
+    "createdAt": "2024-04-06T21:52:53.032Z",
+    "updatedAt": "2024-04-06T21:52:53.032Z",
+    "comments": [
+        {
+            "id": 4,
+            "text": "comment 3",
+            "createdAt": "2024-04-07T13:03:25.260Z",
+            "updatedAt": "2024-04-07T13:03:14.779Z",
+            "articleId": 4,
+            "userId": 1,
+            "user": {
+                "id": 1,
+                "email": "sakr.bzns@gmail.com",
+                "username": "sakr",
+                "password": "123456",
+                "isAdmin": false,
+                "createdAt": "2024-03-17T19:37:56.576Z",
+                "updatedAt": "2024-03-17T19:37:56.576Z"
+            }
+        },
+        {
+            "id": 3,
+            "text": "comment 2",
+            "createdAt": "2024-04-07T13:03:11.588Z",
+            "updatedAt": "2024-04-07T13:02:50.514Z",
+            "articleId": 4,
+            "userId": 1,
+            "user": {
+                "id": 1,
+                "email": "sakr.bzns@gmail.com",
+                "username": "sakr",
+                "password": "123456",
+                "isAdmin": false,
+                "createdAt": "2024-03-17T19:37:56.576Z",
+                "updatedAt": "2024-03-17T19:37:56.576Z"
+            }
+        },
+        {
+            "id": 2,
+            "text": "comment 1",
+            "createdAt": "2024-04-07T13:02:45.825Z",
+            "updatedAt": "2024-04-07T13:02:01.719Z",
+            "articleId": 4,
+            "userId": 1,
+            "user": {
+                "id": 1,
+                "email": "sakr.bzns@gmail.com",
+                "username": "sakr",
+                "password": "123456",
+                "isAdmin": false,
+                "createdAt": "2024-03-17T19:37:56.576Z",
+                "updatedAt": "2024-03-17T19:37:56.576Z"
+            }
+        }
+    ]
+}
+```
+
+ولكننا عايزين نجيب بيانات معينة من ال user مش كل بياناته ، عشان مايرجعش ال passwords والبيانات السرية ، فسيتم ذلك من خلال استخدام select كالتالي : 
+```ts
+const article = await prisma.article.findUnique({
+            where:{id: parseInt(params.id)},
+            include:{
+                comments:{
+                    orderBy:{
+                        createdAt: 'desc'
+                    },
+                    include:{
+                        user:{
+                            select:{
+                                username: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+```
+
+
+
+----------------------------------------------------------------------------
+
+
