@@ -7154,3 +7154,306 @@ export async function GET(request: NextRequest){
 
 ----------------------------------------------------------------------------
 
+
+كده عملنا ال pages وال api routes ،
+المفترض نربط ال ui مع ال api ، 
+ولكن قبل ذلك عندنا بعض الأخطاء لابد من معالجتها ، وسنقوم بذلك في هذا ال commit ،
+
+
+أولاً : مسح التعليقات comments الخاصة ب article معين عند مسح هذا ال article ، 
+وكذلك عند مسح user معين ، لابد من مسح كل ال comments التى كتبها هذا ال user ، 
+
+فحالياً لو جربنا نمسح أي article له comments سيظهر خطأ من ال server واللي عملناله رسالة Internal Server Error ، فممكن نحصل عال error من خلال ال console كالتالي : 
+```ts
+catch (error) {
+        console.log(error);
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+```
+
+فعند حذف ال article هيطلع ال error التالي في ال terminal : 
+```
+Foreign key constraint failed on the field: `articleId`
+```
+
+وهو يعني أننا نحذف article له علاقة مع جدول أخر ،
+
+وبالتالي في ال Article DELETE route handler واللي الكود بتاعها كالتالي : 
+```ts
+export async function DELETE(request: NextRequest, {params}:Props){
+    try {
+        const user = verifyToken(request);
+        if(user === null || user.isAdmin === false){
+            return NextResponse.json(
+                {message: 'Only Admin Can Create Article'},
+                {status: 403}
+            )
+        }
+
+        const article = await prisma.article.findUnique({
+            where: {id: parseInt(params.id)}
+        });
+        if(!article){
+            return NextResponse.json({message: 'Article Is Not Found'}, {status: 404});
+        }
+        await prisma.article.delete({where:{id: parseInt(params.id)}});
+        return NextResponse.json({message: 'Article Was Deleted Successfully'}, {status:200});
+    } catch (error) {
+        console.log(error);
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+فهنجيب كل ال comments الخاصة بال article وذلك من خلال include كالتالي : 
+```
+const article = await prisma.article.findUnique({
+            where: {id: parseInt(params.id)},
+            include: { comments: true}
+        });
+```
+
+وعشان نسمح كل هذه ال comments الخاصة بال article ، فعلينا الحصول على كل ال ids الخاصة بال comments ك array ،
+وبالتالي هنجيبها من ال article ونخزنها في const بإستخدام ال map ، كالتالي : 
+```ts
+const commentIds: number[] = article.comments.map(comment=>comment.id); // [1, 3, 5, 7, ...]
+```
+
+ثم نقوم بكتابة كود حذف العديد من ال comments بإستخدام deleteMany() method كالتالي : 
+```ts
+await prisma.comment.deleteMany({
+            where:{id: { in: commentIds}}
+        })
+```
+
+لاحظ أننا إستخدمنا in property واذي يقبل array ، 
+وبالتالي يصبح الكود بالنهاية كالتالي : 
+```ts
+try {
+        const user = verifyToken(request);
+        if(user === null || user.isAdmin === false){
+            return NextResponse.json(
+                {message: 'Only Admin Can Create Article'},
+                {status: 403}
+            )
+        }
+
+        const article = await prisma.article.findUnique({
+            where: {id: parseInt(params.id)},
+            include: { comments: true}
+        });
+        if(!article){
+            return NextResponse.json({message: 'Article Is Not Found'}, {status: 404});
+        }
+
+        // Deleting The Article
+        await prisma.article.delete({where:{id: parseInt(params.id)}});
+
+        // Deleting The Comments Which Belong To This Article
+        const commentIds: number[] = article.comments.map(comment=>comment.id); // [1, 3, 5, 7, ...]
+
+        await prisma.comment.deleteMany({
+            where:{id: { in: commentIds}}
+        })
+
+        return NextResponse.json({message: 'Article Was Deleted Successfully'}, {status:200});
+    }
+```
+
+
+هنطبق نفس الحكاية على ال user DELETE route handler ،
+فهنعمل inclue لل comments للبيانات اللي راجعة من ال user ، كالتالي : 
+```ts
+const user = await prisma.user.findUnique({ 
+    where: {id: parseInt(params.id)},
+    include: { comments: true}
+});
+```
+
+
+وبعدها هنعمل const commentIds ك array ونخزن فيه كل ال comments Id ، وبعدها نعمل كود الحذف ، كالتالي : 
+```ts
+// Delete The Comments Which belong to This User
+const commentIds = user?.comments.map(comment=>comment.id);
+await prisma.comment.deleteMany({
+    where: {id: {in: commentIds}}
+});
+```
+
+ليكون الكود بالنهاية كالتالي : 
+```ts
+try {
+        const user = await prisma.user.findUnique({ 
+            where: {id: parseInt(params.id)},
+            include: { comments: true}
+        });
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const userFromToken = verifyToken(request);
+
+        if(userFromToken !== null && userFromToken.id == user.id){
+            // Delete The User
+            await prisma.user.delete({where:{id: parseInt(params.id)}});
+
+            // Delete The Comments Which belong to This User
+            const commentIds = user?.comments.map(comment=>comment.id);
+            await prisma.comment.deleteMany({
+                where: {id: {in: commentIds}}
+            });
+
+            return NextResponse.json(
+                {message: 'Your Profile Has Been Deleted Successfully'},
+                {status: 200}
+            )
+        }
+
+        return NextResponse.json(
+            {message: 'Only User Can Remove His Profile'},
+            {status: 403} // Forbidden
+        )
+    }
+```
+
+
+
+ولكن حتى الآن لن يتم تنفيذ الحذف برضه ، لأننا لسه محددناش ال action عند ال delete بقاعدة البيانات ،
+وبالتالي هنروح لل schema.prisma في ال model Comment ونضيف onDelete: Cascade للعلاقة الخاصة بال articleId وال userId كالتالي : 
+```ts
+model Comment{
+  id          Int       @id @default(autoincrement())
+  text        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  articleId   Int
+  userId      Int
+
+  // One-To-Many Relation between Article & Comment
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  // One-To-Many Relation between User & Comment
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+ولكن قاعدة البيانات لم تقرأ هذا التعديل ، فعلينا عمل migrate ليتم تعديل ال action بقاعدة البيانات ، 
+فلعمل migrate هنوقف ال prisma studio وننفذ الأمر التالي : 
+```
+npx prisma migrate dev
+```
+
+فهيطلب مننا اسم لل migrate ، ممكن نكتب addedOnDeleteActionToCommentTable
+هنلاحظ أنه تم اضافة ملف جديد بهذا الاسم ب prisma/migrations folder كالتالي : 
+```sql
+-- DropForeignKey
+ALTER TABLE `comment` DROP FOREIGN KEY `Comment_articleId_fkey`;
+
+-- DropForeignKey
+ALTER TABLE `comment` DROP FOREIGN KEY `Comment_userId_fkey`;
+
+-- AddForeignKey
+ALTER TABLE `Comment` ADD CONSTRAINT `Comment_articleId_fkey` FOREIGN KEY (`articleId`) REFERENCES `Article`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Comment` ADD CONSTRAINT `Comment_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+```
+
+نفتح الآن ال prisma studio وال postman ونحاول نحذف ال article ، هنلاقي أنه تم الحذف بنجاح مع كل ال comments الخاصة به ايضاً ، وكذلك عند حذف user أيضاً .
+
+
+-------------
+
+ثانياً : عمل validation لل update user profile ، 
+هنلاحظ أنه في ال user PUT route handler إننا عملنا validation لل password فقط ، ولم نعمل لل email وال username كالتالي : 
+```ts
+const body = await request.json() as UpdateUserDto ;
+
+        if(body.password){
+            if(body.password.length < 6){
+                return NextResponse.json(
+                    {message: 'Password length must be 6 characters at least'},
+                    {status: 400}
+                )
+            }
+            const salt = await bcrypt.genSalt(10);
+            body.password = await bcrypt.hash(body.password, salt);
+        }
+```
+
+فممكن نعملها من خلال zod بملف ال validationSchema.ts ، ليكون الكود كالتالي : 
+```ts
+// Update User Profile Schema
+export const updateUserSchema = z.object({
+    username: z.string().min(2).max(100).optional(),
+    email: z.string().min(3).max(200).email().optional(),
+    password: z.string().min(6).optional(),
+});
+```
+
+لاحظ أنه مثل ال Register User Schema بالضبط ، ولكننا اضفنا optional لكل حقل ، وذلك لأن المستخدم ممكن يعدل في حقل ، وحقل آخر لأ ، 
+
+هنروح بعد كده نطبق ال validation بال user PUT route handler ليصبح الكود كالتالي : 
+```ts
+try {
+        const user = await prisma.user.findUnique({where: {id: parseInt(params.id)}});
+
+        if(!user){
+            return NextResponse.json(
+                {message: 'User Not Found'},
+                {status: 404}
+            )
+        }
+
+        const userFromToken = verifyToken(request);
+        if(userFromToken === null || userFromToken.id != user.id){
+            return NextResponse.json(
+                {message: 'You Are Not Allowed, Access Denied'},
+                {status: 403}
+            )
+        }
+
+        // Code of update user data ....
+        const body = await request.json() as UpdateUserDto ;
+        const validation = updateUserSchema.safeParse(body);
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            )
+        }
+
+        if(body.password){
+            const salt = await bcrypt.genSalt(10);
+            body.password = await bcrypt.hash(body.password, salt);
+        }
+        const updatedUser = await prisma.user.update({
+            where: {id: parseInt(params.id)},
+            data:{
+                username: body.username,
+                email: body.email,
+                password: body.password
+            }
+        });
+
+        const {password, ...other} = updatedUser;
+        return NextResponse.json( {...other}, {status: 200});
+
+    }
+```
+
+ممكن نجرب بال postman لنتأكد أن كل شئ تمام .
+
+
+
+----------------------------------------------------------------------------
+

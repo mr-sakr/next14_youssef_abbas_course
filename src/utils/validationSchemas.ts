@@ -18,6 +18,14 @@ export const registerUserSchema = z.object({
 });
 
 
+// Update User Profile Schema
+export const updateUserSchema = z.object({
+    username: z.string().min(2).max(100).optional(),
+    email: z.string().min(3).max(200).email().optional(),
+    password: z.string().min(6).optional(),
+});
+
+
 // Login User Schema
 export const loginUserSchema = z.object({
     email: z.string().min(3).max(200).email(),

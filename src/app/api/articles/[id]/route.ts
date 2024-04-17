@@ -109,14 +109,26 @@ export async function DELETE(request: NextRequest, {params}:Props){
         }
 
         const article = await prisma.article.findUnique({
-            where: {id: parseInt(params.id)}
+            where: {id: parseInt(params.id)},
+            include: { comments: true}
         });
         if(!article){
             return NextResponse.json({message: 'Article Is Not Found'}, {status: 404});
         }
+
+        // Deleting The Article
         await prisma.article.delete({where:{id: parseInt(params.id)}});
+
+        // Deleting The Comments Which Belong To This Article
+        const commentIds: number[] = article.comments.map(comment=>comment.id); // [1, 3, 5, 7, ...]
+
+        await prisma.comment.deleteMany({
+            where:{id: { in: commentIds}}
+        })
+
         return NextResponse.json({message: 'Article Was Deleted Successfully'}, {status:200});
     } catch (error) {
+        console.log(error);
         return NextResponse.json(
             {message: 'Internal Server Error'},
             {status: 500}

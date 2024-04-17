@@ -3,6 +3,7 @@ import prisma from "@/utils/db";
 import { verifyToken } from "@/utils/verifyToken";
 import { UpdateUserDto } from "@/utils/dtos";
 import bcrypt from 'bcryptjs';
+import { updateUserSchema } from "@/utils/validationSchemas";
 
 interface Props {
     params: { id: string }
@@ -18,7 +19,10 @@ interface Props {
 
 export async function DELETE(request: NextRequest, {params} : Props){
     try {
-        const user = await prisma.user.findUnique({ where: {id: parseInt(params.id)}});
+        const user = await prisma.user.findUnique({ 
+            where: {id: parseInt(params.id)},
+            include: { comments: true}
+        });
         if(!user){
             return NextResponse.json(
                 {message: 'User Not Found'},
@@ -29,7 +33,15 @@ export async function DELETE(request: NextRequest, {params} : Props){
         const userFromToken = verifyToken(request);
 
         if(userFromToken !== null && userFromToken.id == user.id){
+            // Delete The User
             await prisma.user.delete({where:{id: parseInt(params.id)}});
+
+            // Delete The Comments Which belong to This User
+            const commentIds = user?.comments.map(comment=>comment.id);
+            await prisma.comment.deleteMany({
+                where: {id: {in: commentIds}}
+            });
+
             return NextResponse.json(
                 {message: 'Your Profile Has Been Deleted Successfully'},
                 {status: 200}
@@ -40,8 +52,6 @@ export async function DELETE(request: NextRequest, {params} : Props){
             {message: 'Only User Can Remove His Profile'},
             {status: 403} // Forbidden
         )
-
-        
     } catch (error) {
         return NextResponse.json(
             {message: 'Internal Server Error'},
@@ -126,14 +136,15 @@ export async function PUT(request : NextRequest, {params} : Props){
 
         // Code of update user data ....
         const body = await request.json() as UpdateUserDto ;
+        const validation = updateUserSchema.safeParse(body);
+        if(!validation.success){
+            return NextResponse.json(
+                {message: validation.error.errors[0].message},
+                {status: 400}
+            )
+        }
 
         if(body.password){
-            if(body.password.length < 6){
-                return NextResponse.json(
-                    {message: 'Password length must be 6 characters at least'},
-                    {status: 400}
-                )
-            }
             const salt = await bcrypt.genSalt(10);
             body.password = await bcrypt.hash(body.password, salt);
         }
