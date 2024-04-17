@@ -1,19 +1,37 @@
-const pages = [1, 2, 3, 4]
+import Link from "next/link";
 
-const Pagination = () => {
+interface PaginationProps{
+  pages: number,
+  pageNumber: number,
+  route: string
+}
+
+const Pagination = ({pages, pageNumber, route}: PaginationProps) => {
+  let pagesArray:number[] = [];
+  for(let i = 1; i <= pages; i++){
+    pagesArray.push(i);
+  }
+
   return (
     <div className='flex justify-center items-center mt-2 mb-10'>
-        <div className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+      {pageNumber !== 1 && (
+
+        <Link href={`${route}?pageNumber=${pageNumber-1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
             Prev
-        </div>
-        {pages.map(item=>
-        <div key={item} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
-            {item}
-        </div>
-        )}
-        <div className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+        </Link>
+      )}
+
+      {pagesArray.map(page=>
+      <Link href={`${route}?pageNumber=${page}`} className={`${pageNumber === page ? "bg-gray-500" : ""} border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition`}>
+          {page}
+      </Link>
+      )}
+
+      {pageNumber !== pages && (
+        <Link href={`${route}?pageNumber=${pageNumber+1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
             Next
-        </div>
+        </Link>
+      )}
     </div>
   )
 }

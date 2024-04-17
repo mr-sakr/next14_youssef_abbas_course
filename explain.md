@@ -7457,3 +7457,456 @@ try {
 
 ----------------------------------------------------------------------------
 
+
+نقوم في هذا ال commit بربط ال articles page مع ال api ،
+حيث أن كود ال articles page قبل التعديل والربط كالتالي : 
+```tsx
+import ArticleItem from "@/components/articles/ArticleItem";
+import Pagination from "@/components/articles/Pagination";
+import SearchArticleInput from "@/components/articles/SearchArticleInput";
+import { Article } from "@/utils/types";
+import { Metadata } from "next";
+
+export const metadata:Metadata = {
+  title: "Articles Page",
+  description: "Articles About Programming",
+}
+
+const ArticlesPage = async () => {
+
+  // await new Promise((resolve) => setTimeout(resolve, 10000));
+
+  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+
+  if(!response.ok){
+    throw new Error("Failed To Fetch Articles");
+  }
+
+  const articles: Article[] = await response.json();
+
+  return (
+    <section className="container m-auto px-5">
+      <SearchArticleInput/>
+      <div className="flex items-center justify-center flex-wrap gap-7">
+        {articles.slice(0, 6).map((item) => (
+          <ArticleItem article={item} key={item.id} />
+        ))}
+      </div>
+      <Pagination/>
+    </section>
+  );
+};
+
+export default ArticlesPage;
+```
+
+فسنقوم بتعديل ال api endpoint أولاً ، فكنا بنستخدم ال jsonplaceholder فقط للتجربة ، لحين الإنتهاء من إنشاء ال api route handlers ،
+فهنعدل ال api لتكون كالتالي : 
+```tsx
+const response = await fetch("http://localhost:3000/api/articles");
+```
+
+ولكن لأننا نستخدم ال pagination فهنستخدم ال query string بإسم pageNumber كما حددناها سابقاً بال api كالتالي : 
+```tsx
+const response = await fetch(`http://localhost:3000/api/articles?pageNumber=${1}`);
+```
+لاحظ أننا عملنا قيمة ال pageNumber مؤقتاً تساوي 1 ، ولكن هنعملها dynamic بعد كده ، 
+وهنحذف ال slice(0, 6) method أيضاً لأننا هنعمل ال pagination ،
+
+بعد كده هنخلي ال const articles من نوع Article[] array اللي جاي من ال prisma/client وليس من ال utils/types ، 
+فهنكتب الكود التالي : 
+```tsx
+import { Article } from "@prisma/client";
+```
+بدلاً من التالي : 
+```tsx
+import { Article } from "@/utils/types"
+```
+وذلك في ال articles/page.tsx وكذلك ال ArticleItem.tsx component ،
+وبال ArticleItem.tsx component نقوم بتعديل ال {article.body} لتصبح {article.description} لأننا عدلنا اسم الحقل لهذا ، 
+
+
+بالمتصفح سنجد أنه تم عرض ال articles من قاعدة البيانات بنجاح ،
+بال Navbar component هنعدل ال route بتاع ال articles بإضافة ال pageNumber query string كالتالي : 
+```tsx
+<Link onClick={() => setToggle(false)} className={styles.navLink} href="/articles?pageNumber=1">Articles</Link>
+```
+لاحظ اننا عملنا ال pageNumber تساوي 1 في اللينك لأنها الصفحة الإفتراضية اللي هيدخل عليها المستخدم مباشرة عند زيارة صفحة articles ،
+
+بعد كده عشان نخلي ال pageNumber تكون dynamic ، فعايزين ناخد ال query string من ال url ، فهيكون من خلال ال props ،
+فهنعمل interface جديد بإسم ArticlesPageProps ، وهنلاقي كل ال query string الموجودة عندنا في ال url هتكون داخل ال searchParams ، فاحنا عندنا pageNumber فقط ،
+فهنعمل ال interface كالتالي : 
+```tsx
+interface ArticlesPageProps{
+  searchParams:{ pageNumber : string }
+}
+```
+
+وهنمرره داخل ال function component كالتالي : 
+```tsx
+const ArticlesPage = async ( {searchParams} : ArticlesPageProps) => {
+```
+
+وهنعمل const pageNumber ونستخدمه في ال API ليكون ال pagination عبارة عن dynamic ليصبح الكود في النهاية كالتالي : 
+```tsx
+import ArticleItem from "@/components/articles/ArticleItem";
+import Pagination from "@/components/articles/Pagination";
+import SearchArticleInput from "@/components/articles/SearchArticleInput";
+import { Article } from "@prisma/client";
+import { Metadata } from "next";
+
+export const metadata:Metadata = {
+  title: "Articles Page",
+  description: "Articles About Programming",
+}
+
+interface ArticlesPageProps{
+  searchParams:{ pageNumber : string }
+}
+
+const ArticlesPage = async ( {searchParams} : ArticlesPageProps) => {
+
+  const { pageNumber } = searchParams;
+
+  const response = await fetch(`http://localhost:3000/api/articles?pageNumber=${pageNumber}`);
+
+  if(!response.ok){
+    throw new Error("Failed To Fetch Articles");
+  }
+
+  const articles: Article[] = await response.json();
+
+  return (
+    <section className="container m-auto px-5">
+      <SearchArticleInput/>
+      <div className="flex items-center justify-center flex-wrap gap-7">
+        {articles.map((item) => (
+          <ArticleItem article={item} key={item.id} />
+        ))}
+      </div>
+      <Pagination/>
+    </section>
+  );
+};
+
+export default ArticlesPage;
+```
+
+وبالتالي لو جربنا بالمتصفح وغيرنا قيمة ال pageNumber في اللينك بالمتصفح هنلاقي كل شئ تمام ، وبيحمل ال articles الخاصة بال pageNumber فقط ،
+
+
+ولكن عندنا فكرة للتنظيم فقط ، المفترض إننا هنادي على ال articles بناءاً على رقم الصفحة في أماكن كتير بالتطبيق ، فمثلاً هنادي عليه لل dashbord ، 
+وهنادي برضه على الكثير من ال models في أكثر من مكان ، 
+فممكن نعمل function بإسم getArticles عشان نناديها في أي مكان نريد 
+وممكن نعمل فولدر جديد بال src بإسم apiCalls ، وكل model هنادي عليه في أكثر من مكان ممكن نعمله ملف داخل هذا الفولدر ،
+وبالتالي هنعمل ملف داخله بإسم articleApiCall.ts ونكتب ال getArticles function بداخله ، وننقل الكود بتاع بتاع جلب ال articles من ال articles page لهذه ال function ، ونعمل لها export وimport ، فهتكون getArticles function كالتالي : 
+```ts
+import { Article } from "@prisma/client";
+
+// Get articles based on pageNumber
+export async function getArticles(pageNumber: string | undefined) : Promise<Article[]>{
+    const response = await fetch(`http://localhost:3000/api/articles?pageNumber=${pageNumber}`);
+    if(!response.ok){
+        throw new Error("Failed To Fetch Articles");
+    }
+    return response.json();
+}
+```
+
+هنلاحظ إننا مررنا فيها pageNumber وعملنا نوعه إما string أو undefined ، ولأن ال return type لهذا ال function يكون arry من ال articles ، ولأنه أيضاً async فهنخلي ال return type داخل promis<> كالتالي  : Promise<Article[]> ...etc  ، 
+فعشان نستخدم ال getArticles في ال articles/page هنعمل import لل getArticles أولاً ، ثم نستخدمها بتمرير ال pageNumber لها ، ليكون الكود الخاص بال articles/page في النهاية كالتالي : 
+```tsx
+import ArticleItem from "@/components/articles/ArticleItem";
+import Pagination from "@/components/articles/Pagination";
+import SearchArticleInput from "@/components/articles/SearchArticleInput";
+import { Article } from "@prisma/client";
+import { Metadata } from "next";
+import { getArticles } from "@/apiCalls/articleApiCall";
+
+export const metadata:Metadata = {
+  title: "Articles Page",
+  description: "Articles About Programming",
+}
+
+interface ArticlesPageProps{
+  searchParams:{ pageNumber : string }
+}
+
+const ArticlesPage = async ( {searchParams} : ArticlesPageProps) => {
+
+  const { pageNumber } = searchParams;
+
+  const articles: Article[] = await getArticles(pageNumber);
+
+  return (
+    <section className="container m-auto px-5">
+      <SearchArticleInput/>
+      <div className="flex items-center justify-center flex-wrap gap-7">
+        {articles.map((item) => (
+          <ArticleItem article={item} key={item.id} />
+        ))}
+      </div>
+      <Pagination/>
+    </section>
+  );
+};
+
+export default ArticlesPage;
+```
+
+لو تحققنا من المتصفح هنلاقي إن كل شئ حتى الآن تمام ، 
+
+ولكن طبعاً مش منطقي إن المستخدم يقلب بين الصفحات بتغيير ال pageNumber من ال link بالمتصفح ، 
+ولكن عايزين نشغل ال pagination bar اللي عملناه بأسفل صفحة ال articles ، فعند الضغط على رقم الصفحة هيجيب ال articles بتاعة الصفحة دي ، وهكذا ...
+
+فهنروح لل articles/Pagination component اللي عملنا قبل كده ، واللي خاص بالبار بتاع ترقيم الصفحات ، وكان الكود الخاص به كالتالي : 
+```tsx
+const pages = [1, 2, 3, 4]
+
+const Pagination = () => {
+  return (
+    <div className='flex justify-center items-center mt-2 mb-10'>
+        <div className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Prev
+        </div>
+        {pages.map(item=>
+        <div key={item} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            {item}
+        </div>
+        )}
+        <div className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Next
+        </div>
+    </div>
+  )
+}
+
+export default Pagination
+```
+
+ولكن ترقيم الصفحات فيه كان يعتمد على array من الأرقام ، وطبعاً هذا غير منطقي فإحنا عايزين الموضوع يكون dynamic ،
+فهنعتمد على 3 متغيرات ، وهما : 
+ال pages بمعنى عدد الصفحات ،
+وال pageNumber وهو رقم الصفحة ،
+وال route وده المسار اللي هيحدد ال pageNumber
+
+فهنعمل interface ونحدد نوع ال pages وال pageNumber وال route ونمررهم بال component function ، كالتالي : 
+```tsx
+interface PaginationProps{
+  pages: number,
+  pageNumber: number,
+  route: string
+}
+
+const Pagination = ({pages, pageNumber, route}: PaginationProps) => {
+```
+
+وهنروح بعدها لل articles/page.tsx ونمرر ال props بتاعت ال </Pagination> فيها كالتالي : 
+```tsx
+<Pagination pageNumber={pageNumber} route="/articles"/>
+```
+
+ولكن عشان نمرر ال pages ونجيب قيمتها ، فقيمتها موجودة في ال api handler اللي عملناه الخاص ب count articles ، فممكن نعمل function داخل articleApiCall.ts ونصدرها بإسم getArticlesCount كالتالي : 
+```ts
+// Get articles count
+export async function getArticlesCount() : Promise<number>{
+    const response = await fetch(`http://localhost:3000/api/articles/count`);
+    if(!response.ok){
+        throw new Error("Failed To get articles count");
+    }
+    const {count} = await response.json() as {count:number};
+    return count;
+}
+```
+
+وبالتالي هنعمل import لل getArticlesCount بال articles/page ونخزنها في const count من نوع number ، كالتالي : 
+```tsx
+const count:number = await getArticlesCount();
+```
+
+بعد كده هنعمل const pages واللي هيساوي عدد ال articles اللي راجعة من قاعدة البيانات \ عدد ال articles للصفحة الواحدة ، واللي احنا عملنا لها constant بإسم ARTICLES_PER_PAGE وخزناها في ملف utils/constants ، ولازم نستخدم التقريب للأعلى ، بحيث لو عدد ال articles يساوي 19 ، وال ARTICLES_PER_PAGE  تساوي 6 ، فالنتيجة هتطلع 3.1 ، ولكننا عايزين النتيجة تساوي 4 ،
+عشان يكون عدد الصفحات = 4 ، 
+وبالتالي هنستخدم Math.ceil method ، كالتالي : 
+```tsx
+  const count:number = await getArticlesCount();
+  const pages = Math.ceil(count / ARTICLES_PER_PAGE);
+```
+
+وهنا نقدر نمرر ال pages props لل pagination كالتالي : 
+```tsx
+<Pagination pageNumber={pageNumber} route="/articles" pages={pages}/>
+```
+
+ولو لاحظنا هنلاقي type error عند ال pageNumber لأنه من نوع number لكن قيمته من نوع string ، وبالتالي ممكن نحولها من string ل number بإستخدام parseInt method كالتالي : 
+```tsx
+<Pagination pageNumber={parseInt(pageNumber)} route="/articles" pages={pages}/>
+```
+
+ليكون كود ال articles/page بالنهاية كالتالي : 
+```tsx
+import ArticleItem from "@/components/articles/ArticleItem";
+import Pagination from "@/components/articles/Pagination";
+import SearchArticleInput from "@/components/articles/SearchArticleInput";
+import { Article } from "@prisma/client";
+import { Metadata } from "next";
+import { getArticles, getArticlesCount } from "@/apiCalls/articleApiCall";
+import { ARTICLES_PER_PAGE } from "@/utils/constants";
+
+export const metadata:Metadata = {
+  title: "Articles Page",
+  description: "Articles About Programming",
+}
+
+interface ArticlesPageProps{
+  searchParams:{ pageNumber : string }
+}
+
+const ArticlesPage = async ( {searchParams} : ArticlesPageProps) => {
+  const { pageNumber } = searchParams;
+  const articles: Article[] = await getArticles(pageNumber);
+
+  const count:number = await getArticlesCount();
+  const pages = Math.ceil(count / ARTICLES_PER_PAGE);
+
+
+  return (
+    <section className="container m-auto px-5">
+      <SearchArticleInput/>
+      <div className="flex items-center justify-center flex-wrap gap-7">
+        {articles.map((item) => (
+          <ArticleItem article={item} key={item.id} />
+        ))}
+      </div>
+      <Pagination pageNumber={parseInt(pageNumber)} route="/articles" pages={pages}/>
+    </section>
+  );
+};
+
+export default ArticlesPage;
+```
+
+هنروح بعد كده لل pagination component بسبب وجود مشكلة type error في ال map ، بالكود التالي : 
+```tsx
+{pages.map(item=>
+        <div key={item} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            {item}
+        </div>
+        )}
+```
+
+سبب المشكلة أن ال pages من نوع number ولكن ال map بتشتغل مع ال array ، وبالتالي هنحتاج نحول ال pages ل array ، 
+فممكن بإستخدام ال for loop نحولها array ، حيث هنعمل array فاضية ون push فيها كل عناصر ال for loop كالتالي : 
+```tsx
+let pagesArray:number[] = [];
+  for(let i = 1; i <= pages; i++){
+    pagesArray.push(i);
+  }
+```
+
+بعد كده هنستخدم ال map مع ال pagesArray ، وطبعاً هنحتاج نحول ترقيم ال pagination ليكون Link عشان نقدر نضغط عليه ويحولنا للصفحة المطلوبة ، 
+ليكون الكود بالنهاية كالتالي : 
+```tsx
+{pagesArray.map(page=>
+        <Link href={`${route}?pageNumber=${page}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            {page}
+        </Link>
+        )}
+```
+
+عايزين دلوقتى نشغل ال prev وال next الموجودين في ال pagination فهنحولهم ل Link ونخلي ال href بتاعتهم فيها ال pageNumber-1 و pageNumber+1 كالتالي : 
+
+```tsx
+<Link href={`${route}?pageNumber=${pageNumber-1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+    Prev
+</Link>
+```
+
+```tsx
+<Link href={`${route}?pageNumber=${pageNumber+1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+    Next
+</Link>
+```
+
+ولكن خد بالك ، كده زر ال next هيفضل مفعل حتى لو وصلت للنهاية ، بمعنى ممكن يكون عدد الصفحات 5 ، واحنا دلوقتى في الصفحة ال 5 ، وتضغط على next هيعمل ال route ان ال pageNumber=6 ، مع ان مفيش صفحة 6 ، او 7 وهكذا ، فهتكون الصفحات الزيادة دي فاضية من غير أي articles ، وبالعكس في حالة زر ال prev ، 
+وبالتالي ممكن نعمل حالة if ، فلو احنا مش في ال pageNumber 1 ، فإظهر prev ، ولو احنا مش في الصفحة الأخير فاظهر next كالتالي : 
+
+```tsx
+{pageNumber !== 1 && (
+
+        <Link href={`${route}?pageNumber=${pageNumber-1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Prev
+        </Link>
+      )}
+
+      {pagesArray.map(page=>
+      <Link href={`${route}?pageNumber=${page}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+          {page}
+      </Link>
+      )}
+
+      {pageNumber !== pages && (
+        <Link href={`${route}?pageNumber=${pageNumber+1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Next
+        </Link>
+      )}
+```
+
+وبالتالي لو احنا في الصفحة الأولي ، فزر prev لن يكون موجود ، ولو كنا في الصفحة الأخيرة ، فزر next لن يكون موجود .
+
+
+عايزين بقى دلوقتى نميز رقم الصفحة اللي إنا فيها دلوقتى في ال pagination ، كأن يكون بخليفة لون اغمق ، 
+يتم ذلك من خلال جعل ال className تكون dynamic ونعمل فيها شرط لو ال pageNumber == page فاضف class كذا ، كالتالي : 
+```tsx
+{pagesArray.map(page=>
+      <Link href={`${route}?pageNumber=${page}`} className={`${pageNumber === page ? "bg-gray-500" : ""} border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition`}>
+          {page}
+      </Link>
+      )}
+```
+
+ليكون كود ال pagination component في النهاية كالتالي : 
+```tsx
+import Link from "next/link";
+
+interface PaginationProps{
+  pages: number,
+  pageNumber: number,
+  route: string
+}
+
+const Pagination = ({pages, pageNumber, route}: PaginationProps) => {
+  let pagesArray:number[] = [];
+  for(let i = 1; i <= pages; i++){
+    pagesArray.push(i);
+  }
+
+  return (
+    <div className='flex justify-center items-center mt-2 mb-10'>
+      {pageNumber !== 1 && (
+
+        <Link href={`${route}?pageNumber=${pageNumber-1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Prev
+        </Link>
+      )}
+
+      {pagesArray.map(page=>
+      <Link href={`${route}?pageNumber=${page}`} className={`${pageNumber === page ? "bg-gray-500" : ""} border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition`}>
+          {page}
+      </Link>
+      )}
+
+      {pageNumber !== pages && (
+        <Link href={`${route}?pageNumber=${pageNumber+1}`} className="border border-gray-700 text-gray-700 py-1 px-3 font-bold text-xl cursor-pointer hover:bg-gray-200 transition">
+            Next
+        </Link>
+      )}
+    </div>
+  )
+}
+
+export default Pagination
+```
+
+
+----------------------------------------------------------------------------
+

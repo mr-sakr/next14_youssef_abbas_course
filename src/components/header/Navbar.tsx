@@ -25,7 +25,7 @@ const Navbar = () => {
             <div className={styles.navLinlsWrapper} style={{clipPath: toggle && "polygon(0 0, 100% 0, 100% 100%, 0% 100%)" || ""}}>
                 <ul className={styles.navLinks}>
                     <Link onClick={() => setToggle(false)} className={styles.navLink} href="/">Home</Link>
-                    <Link onClick={() => setToggle(false)} className={styles.navLink} href="/articles">Articles</Link>
+                    <Link onClick={() => setToggle(false)} className={styles.navLink} href="/articles?pageNumber=1">Articles</Link>
                     <Link onClick={() => setToggle(false)} className={styles.navLink} href="/about">About</Link>
                     <Link onClick={() => setToggle(false)} className={styles.navLink} href="/admin">Admin Dashboard</Link>
                 </ul>
