@@ -6976,3 +6976,181 @@ const article = await prisma.article.findUnique({
 ----------------------------------------------------------------------------
 
 
+
+هنشتغل في هذا ال commit على ال Article Search ،
+فبالمتصفح لو دخلنا على ال articles page ، كنا قد عملنا فيها search bar ، 
+فعايزين قدام هنكتب اي كلمة في هذا ال search bar ، ليتم بعد ذلك إرسالها لل api endpoint ، 
+ثم يرجعلي response فيه كل المقالات اللي في عنوانها كلمة البحث اللي كتبناها ،
+
+وبالتالي الآن هنعمل handle لل api endpoint لل article search ،
+فهنعمل ملف route.ts جديد داخل فولدر جديد بإسم search ، ليكون داخل هذا المسار : 
+```
+~/api/articles/search/route.ts
+```
+ هنجهز الملف ونعمل import لل NextRequest, NextResponse و ال prisma ، وهنكتب ال documentation ونعمل try catch ليكون الكود الجاهز كالتالي : 
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/utils/db';
+
+/**
+ * @method  GET
+ * @route   ~/api/articles/search?searchText=value
+ * @desc    Get Articles By Search Text
+ * @access  public
+ */
+
+export async function GET(request: NextRequest){
+    try {
+        // Code ....
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+أول حاجة بعد كده ، لازم نستلم ال searchText من ال request كالتالي : 
+```ts
+const searchText = request.nextUrl.searchParams.get('searchText');
+```
+
+ولكن في بعض الأحيان ممكن المستخدم مايدخلش قيمة بالبحث وتكون القيمة null ،
+وبالتالي ممكن نعمل متغير لل articles ، ونتحقق لو يوجد قيمة لل searchText فهنرجع ال articles المتطابقة مع هذه القيمة ، وإلا هنرجع 6 articles من قاعدة البيانات ، كالتالي : 
+```ts
+try {
+        const searchText = request.nextUrl.searchParams.get('searchText');
+        let articles;
+        if(searchText){
+            articles = await prisma.article.findMany({
+                where:{
+                    title: searchText
+                }
+            })
+        }else{
+            articles = await prisma.article.findMany({ take: 6 });
+        }
+        return NextResponse.json(articles, {status: 200});
+    }
+```
+
+فممكن نعمل request جديد بال postman ب GET method ، ويكون ال route كالتالي : 
+```
+{{DOMAIN}}/api/articles/search?searchText=
+```
+
+ولكن هنلاقي عندنا مشكلة بالكود ، إنه لازم على المستخدم أن يكتب اسم ال article بالضبط وكامل ،
+فمثلاً تم عمل تعديل على some articles لتشتمل على العناوين التالية : 
+```
+sakr
+Mahmoud Sakr
+email: sakr.bzns@gmail.com
+Sakr
+```
+
+فلو بحثنا عن كلمة sakr ، فسيتم الحصول على ال article الأول والرابع فقط ، 
+ولكن لجعل البحث بأي كلمة بالنص ، وليس النص كاملاً ، فيمكننا إستخدام contains() method كالتالي : 
+```ts
+articles = await prisma.article.findMany({
+    where:{
+        title: {
+            contains: searchText,
+        }
+    }
+})
+```
+
+وكنا ممكن نستخدم startsWith() method للبحث عن ال articles اللي بتبتدي ب text معين ،
+وعندنا الكثير من ال methods الممكن إستخدامهم اثناء ال filtering يمكن الاطلاع عليهم في ال prisma documentation باللينك التالي : 
+https://www.prisma.io/docs/orm/prisma-client/queries/filtering-and-sorting#filter-conditions-and-operators
+
+والكود بالنهاية يكون كالتالي : 
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/utils/db';
+
+/**
+ * @method  GET
+ * @route   ~/api/articles/search?searchText=value
+ * @desc    Get Articles By Search Text
+ * @access  public
+ */
+
+export async function GET(request: NextRequest){
+    try {
+        const searchText = request.nextUrl.searchParams.get('searchText');
+        let articles;
+        if(searchText){
+            articles = await prisma.article.findMany({
+                where:{
+                    title: {
+                        contains: searchText,
+                    }
+                }
+            })
+        }else{
+            articles = await prisma.article.findMany({ take: 6 });
+        }
+        return NextResponse.json(articles, {status: 200});
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+
+
+
+---------------------
+
+هنعمل route hadler اخر ، بالمسار التالي : 
+```
+~/api/articles/count/route.ts
+```
+
+وسيكون مسئول عن أن يعطينا عدد ال articles في قاعدة البيانات ، والذي سنحتاجه بعد ذلك في ال pagination ، ويكون الكود كالتالي : 
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/utils/db';
+
+/**
+ * @method  GET
+ * @route   ~/api/articles/count
+ * @desc    Get Articles Count
+ * @access  public
+ */
+
+export async function GET(request: NextRequest){
+    try {
+        const count = await prisma.article.count();
+        return NextResponse.json({count}, {status: 200});
+    } catch (error) {
+        return NextResponse.json(
+            {message: 'Internal Server Error'},
+            {status: 500}
+        )
+    }
+}
+```
+
+هنعمل request جديد بال postman من نوع GET بإسم count وال route كالتالي : 
+```
+{{DOMAIN}}/api/articles/count
+```
+هنلاقي هيرجعلنا عدد ال articles كالتالي : 
+```json
+{
+    "count": 23
+}
+```
+
+
+
+----------------------------------------------------------------------------
+
