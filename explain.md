@@ -8052,3 +8052,515 @@ const formSubmitHandler = (e:React.FormEvent) =>{
 ----------------------------------------------------------------------------
 
 
+في هذا ال commit هنربط ال login form مع ال API ، 
+هنبعت request لل API ، ونخلي المستخدم يعمل login من خلال ال Login Form ، 
+
+
+أولاً هنثبت ال AXIOS ، ممكن نستغل بال fetch عادي ، ولكن هنشتغل هنا بال AXIOS ،
+هنسطبها بالأمر التالي : 
+```
+npm i axios
+```
+
+هنستخدم ال axios مع ال LoginForm component ، والذي كوده كالتالي : 
+```tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useRouter } from "next/navigation";
+
+const LoginForm = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const router = useRouter();
+
+    const formSubmitHandler = (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        console.log({email, password});
+        router.replace('/');
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler} className="flex flex-col">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Email"/>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Password"/>
+            <button type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">Login</button>
+        </form>
+    );
+};
+
+export default LoginForm;
+```
+
+فهنعمل import لل axios ، 
+فالمفترض دلوقتى هنبعت request لل api/login/route وذلك لتسجيل الدخول ،
+فهنشتغل على ال formSubmitHandler وهنخليها async ، ليكون كود ال LoginForm component كالتالي : 
+```tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+
+const DOMAIN = "http://localhost:3000/";
+
+const LoginForm = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const router = useRouter();
+
+    const formSubmitHandler = async (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        try {
+            await axios.post(`${DOMAIN}/api/login`, { email, password });
+            router.replace('/');
+        } catch (error:any) {
+            return toast.error(error?.response?.data.message);
+            console.log(error);
+        }
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler} className="flex flex-col">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Email"/>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Password"/>
+            <button type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">Login</button>
+        </form>
+    );
+};
+
+export default LoginForm;
+```
+
+فلو عملنا تسجيل دخول ، هتلاقي تم تخزين cookie بالمتصفح ، وذلك لأننا في ال api/login/route.ts خليناه يرجع التالي في حالة نجاح ال login : 
+```ts
+return NextResponse.json(
+            {message: 'Authenticated'},
+            {
+                status: 200,
+                headers: {'Set-Cookie' : cookie}
+            }
+        );
+```
+وسيظل ال cookie محفوظ بالمتصفح لغاية أما ال user يعمل logout ،
+
+
+دلوقتى لما المستخدم عمل ال login بنجاح ، المفترض أنه لا يرى أزرار ال login أو ال register بال Navbar ، فهنشتغل عال Header.tsx component ، واللي أكواده كالتالي : 
+```tsx
+import Link from "next/link"
+import styles from "./header.module.css";
+import Navbar from "./Navbar";
+
+const Header = () => {
+    return (
+        <header className={styles.header}>
+            <Navbar/>
+            <div className={styles.right}>
+                <Link className={styles.btn} href="/login">Login</Link>
+                <Link className={styles.btn} href="/register">Register</Link>
+            </div>
+        </header>
+    )
+}
+
+export default Header
+```
+
+فهنتحقق لو فيه cookie فلا يظهر هذه الازرار ، ولكن لو فيه cookie هنحتاج نفك تشفير ال token عشان نجيب بيانات ال user ، 
+فهنعمل function لفك تشفير ال token في ملف ال verifyToken.ts كالتالي : 
+```ts
+// Verify Token For Page
+export function verifyTokenForPage(token: string) : JWTPayload | null{
+    try {
+        const privateKey = process.env.JWT_SECRET as string;
+        const userPayload = Jwt.verify(token, privateKey) as JWTPayload;
+
+        if(!userPayload){
+            return null;
+        }
+        return userPayload;
+    } catch (error) {
+        return null;
+    }
+}
+```
+
+ثم نستخدم ال cookie في جلب ال token ونستخدم ال verifyTokenForPage لفك التشفير ، ليكون كود ال Header Component كالتالي : 
+```tsx
+import Link from "next/link"
+import styles from "./header.module.css";
+import Navbar from "./Navbar";
+import { cookies } from "next/headers";
+import { verifyTokenForPage } from "@/utils/verifyToken";
+
+const Header = () => {
+
+    const token = cookies().get("jwtToken")?.value || "";
+    const payload = verifyTokenForPage(token);
+
+    return (
+        <header className={styles.header}>
+            <Navbar/>
+            <div className={styles.right}>
+                {payload ? (
+                <>
+                <strong className="text-blue-800 md:text-xl capitalize">
+                {payload.username}
+                </strong>
+                </>
+                ) : (
+                <>
+                <Link className={styles.btn} href="/login">Login</Link>
+                <Link className={styles.btn} href="/register">Register</Link>
+                </>
+                )}
+            </div>
+        </header>
+    )
+}
+
+export default Header
+```
+
+هنلاقي أنه تم وضع إسم المستخدم مكان أزرار ال login وال register ،
+
+عايزين دلوقتى نعمل زر logout ووضعه بجانب الإسم ،
+فهنعمل LogoutButton.tsx component بال components/header ، ونعمل فيه function يتم تنفيذها عند الضغط على الزر ، وهذه ال function تعمل logout من خلال ال api/logout ،
+ليكون كود ال function كالتالي : 
+```tsx
+'use client'
+import axios from "axios"
+import { DOMAIN } from "@/utils/constants"
+import { useRouter } from "next/navigation";
+import { toast } from "react-toastify"
+
+export default function LogoutButton(){
+    const router = useRouter();
+
+    const logoutHandler = async () =>{
+        try {
+            await axios.get(`${DOMAIN}/api/logout`);
+            router.push("/");
+        } catch (error) {
+            toast.warning("Something went wrong");
+            console.log(error);
+        }
+    }
+    return(
+        <button onClick={logoutHandler} className="bg-gray-700 text-gray-200 px-1 rounded">Logout</button>
+    )
+}
+```
+لاحظ أننا عملنا constant بإسم DOMAIN في ال constant.ts وصدرناه وعملناله import في ال LogoutButton component ، 
+
+يتم إضافة ال LogoutButton tag بال Header component كالتالي : 
+```tsx
+.
+.
+<strong className="text-blue-800 md:text-xl capitalize">
+{payload.username}
+</strong>
+<LogoutButton/>
+.
+.
+```
+
+فلما نفتح المتصفح ، ولو ضغطنا على زر ال logout ، هنلاقي إن ال cookie اتمسح ،
+ولكن هنلاقي زرار ال logout لسه موجود ، وأزرار ال login وال register غير موجودة ، غير لما نعمل reload بالمتصفح ،
+ونفس المشكلة لما نعمل login هنلاقي إن أزرار ال login وال register لسه موجودة ، وانه لم يتم عرض الإسم ولا زر ال Logout ،
+
+يتم حل هذه المشاكل بالكود التالي : 
+```tsx
+router.refresh();
+```
+
+في ال LoginForm component : 
+```tsx
+const formSubmitHandler = async (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        try {
+            await axios.post(`${DOMAIN}/api/login`, { email, password });
+            router.replace('/');
+            router.refresh();
+        } catch (error:any) {
+            return toast.error(error?.response?.data.message);
+            console.log(error);
+        }
+    }
+```
+
+وفي ال LogoutButton Component : 
+```tsx
+const logoutHandler = async () =>{
+        try {
+            await axios.get(`${DOMAIN}/api/logout`);
+            router.push("/");
+            router.refresh();
+        } catch (error) {
+            toast.warning("Something went wrong");
+            console.log(error);
+        }
+    }
+```
+
+لو جربنا الدخول والخروج الأن هنلاقي كله تمام من غير ما نضطر نعمل reload ،
+
+ولكن فيه حاجة ، إننا لما المستخدم بيعمل login ، ممكن ياخد ثانية أو ثانيتين للتنفيذ ، 
+فعايزين نمنع المستخدم من إمكانية الضغط على زر login مرة اخري في ال form ، ويظهر بالزر كلمة loading .... بدلاً من Login ،
+
+فهنعمل useState بإسم loading ، 
+وهنخلي قيمتها false ، وعند عمل ال login هتكون true ، 
+ولما تكون true هنكتب كلمة loading بدلاً من Login ، 
+وممكن كمان نخلي ال cursor not allowed ، فهيكون ال LoginForm كالتالي : 
+```tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import { DOMAIN } from "@/utils/constants";
+
+const LoginForm = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const router = useRouter();
+
+    const formSubmitHandler = async (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        try {
+            setLoading(true);
+            await axios.post(`${DOMAIN}/api/login`, { email, password });
+            router.replace('/');
+            setLoading(false);
+            router.refresh();
+        } catch (error:any) {
+            setLoading(false);
+            return toast.error(error?.response?.data.message);
+            console.log(error);
+        }
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler} className="flex flex-col">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Email"/>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Password"/>
+            <button disabled={loading} type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">
+                {loading ? 'Loading ...' : 'Login'}
+            </button>
+        </form>
+    );
+};
+
+export default LoginForm;
+```
+
+ونكتب في ال global.css التالي : 
+```css
+button:disabled{
+  cursor: not-allowed;
+}
+```
+
+
+ومن الناحية الجمالية ممكن نعمل spinner بدلاً من كلمة loading ،
+فهنعمل component جديد بإسم ButtonSpinner كالتالي : 
+```tsx
+import Image from "next/image";
+
+export default function ButtonSpinner(){
+    return(
+        <div className="flex justify-center items-center w-full">
+            <Image src={'/loadering_1.gif'} width={200} height={200} alt="loader-image" className="w-7 h-7" />
+        </div>
+    )
+}
+```
+
+وكود إستخدامه بال LoginForm كالتالي : 
+```tsx
+<button disabled={loading} type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">
+    {loading ? <ButtonSpinner/> : 'Login'}
+</button>
+```
+
+-----------
+
+هنعمل بقي دلوقتى ال register ونربطها بال register api ، بالظبط زي ال login ، 
+فال RegisterForm component كالتالي : 
+```tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+
+const RegisterForm = () => {
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+
+    const formSubmitHandler = (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(username === "") return toast.error('Username Is Required');
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        console.log({email, username, password});
+        
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler} className="flex flex-col">
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Username"/>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Email"/>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Password"/>
+            <button type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">Register</button>
+        </form>
+    );
+};
+
+export default RegisterForm;
+```
+
+هنعمل نفس التعديلات عليها لربطها بال API ، ليكون الكود النهائي كالتالي : 
+```tsx
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import { DOMAIN } from "@/utils/constants";
+import ButtonSpinner from "@/components/ButtonSpinner";
+
+const RegisterForm = () => {
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const router = useRouter();
+
+    const formSubmitHandler = async (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        if(username === "") return toast.error('Username Is Required');
+        if(email === "") return toast.error('Email Is Required');
+        if(password === "") return toast.error('Password Is Required');
+        
+        try {
+            setLoading(true);
+            await axios.post(`${DOMAIN}/api/register`, { username, email, password });
+            router.replace('/');
+            setLoading(false);
+            router.refresh();
+        } catch (error:any) {
+            setLoading(false);
+            return toast.error(error?.response?.data.message);
+            console.log(error);
+        }
+
+        console.log({email, username, password});
+        
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler} className="flex flex-col">
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Username"/>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Email"/>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-4 border rounded p-2 text-xl" placeholder="Enter Your Password"/>
+            <button type="submit" className="text-2xl text-white bg-blue-800 p-2 rounded-lg font-bold">
+                {loading ? <ButtonSpinner/> : 'Register'}
+            </button>
+        </form>
+    );
+};
+
+export default RegisterForm;
+```
+
+وبالتالي هنلاقي أنه يتم تسجيل اي حساب جديد بنجاح ويتم عمل token له في ال cookie وكل شئ على مايرام ،
+
+
+عندي بس حاجة دلوقتى ، وهي لما بعمل تسجيل دخول ، لو دخلت على الرابط الخاص بال login فبيتم فتح صفحة ال login وكذلك يمكن فتح صفحة ال register أيضاً ،
+وهذا غير منطقي ، فالمفترض مادمت قد سجلت دخول ، فغير مسموح بزيارة هذه الصفحات ،
+
+
+
+وبالتالي ، هنروح لصفحة ال login/page.tsx ونجيب ال token ، فلو يوجد token بالفعل ، فسيتم التوجيه للصفحة الرئيسية ، كالتالي : 
+```tsx
+import LoginForm from "./LoginForm";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+
+const LoginPage = () => {
+  const token = cookies().get("jwtToken")?.value;
+  if(token){
+    redirect("/");
+  }
+
+  return (
+    <section className="h-[calc(100vh-100px)] container m-auto px-7 flex justify-center items-center">
+      <div className="m-auto bg-white rounded-lg p-5 w-full md:w-2/3">
+        <h1 className="text-3xl font-bold text-gray-800 mb-5">Log In</h1>
+        <LoginForm/>
+      </div>
+    </section>
+  )
+}
+
+export default LoginPage
+```
+
+وكذلك ال register/page.tsx كالتالي : 
+```tsx
+import RegisterForm from "./RegisterForm";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+
+const RegisterPage = () => {
+  const token = cookies().get("jwtToken")?.value;
+  if(token){
+    redirect("/");
+  }
+
+  return (
+    <section className="h-[calc(100vh-100px)] container m-auto px-7 flex justify-center items-center">
+      <div className="m-auto bg-white rounded-lg p-5 w-full md:w-2/3">
+        <h1 className="text-3xl font-bold text-gray-800 mb-5">Create New Account</h1>
+        <RegisterForm/>
+      </div>
+    </section>
+  )
+}
+
+export default RegisterPage
+```
+
+ 
+----------------------------------------------------------------------------
+
+
