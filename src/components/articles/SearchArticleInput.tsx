@@ -11,7 +11,7 @@ const SearchArticleInput = () => {
         e.preventDefault();
 
         console.log({searchText});
-        router.push(`/articles/search?text=${searchText}`);
+        router.push(`/articles/search?searchText=${searchText}`);
     }
 
     return (

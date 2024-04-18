@@ -7910,3 +7910,145 @@ export default Pagination
 
 ----------------------------------------------------------------------------
 
+
+هنشتغل في هذا ال commit على ال Article search page ، بمعنى لما ادخل على صفحة articles ، وابحث عن أي نص في ال search box 
+المفترض تطلعلى ال articles المتطابقة لعملية البحث في ال search page ، 
+
+فهنبعت query لل api ويجيلي ال articles حسب ال search text ، 
+هنعمل function داخل ال articleApiCall.ts لتكون كالتالي : 
+```ts
+// Get articles based on searchText
+export async function getArticlesBasedOnSearch(searchText: string) : Promise<Article[]>{
+    const response = await fetch(`http://localhost:3000/api/articles/search?searchText=${searchText}`);
+    if(!response.ok){
+        throw new Error("Failed To Fetch Articles");
+    }
+    return response.json();
+}
+```
+
+ثم ننادي على هذه ال function في صفحة ال articles/search/page ونستخدمها كالتالي : 
+```tsx
+import { getArticlesBasedOnSearch } from "@/apiCalls/articleApiCall"
+import { Article } from "@prisma/client"
+
+interface ArticlesSearchPageProps{
+  searchParams:{searchText: string},
+}
+
+const ArticlesSearchPage = async ({searchParams}:ArticlesSearchPageProps) => {  
+  const articles:Article[] = await getArticlesBasedOnSearch(searchParams.searchText);
+  return (
+    <section className="flex justify-center p-5 m-5">
+      <h1 className="font-bold mx-2">
+        Articles Based On : 
+        <span>{searchParams.searchText}</span>
+      </h1>
+    </section>
+  )
+}
+
+export default ArticlesSearchPage
+```
+
+وبدلاً من تكرار استخدام searchParams ممكن نعمل object Distructuring لتكون كالتالي : 
+```tsx
+import { getArticlesBasedOnSearch } from "@/apiCalls/articleApiCall"
+import { Article } from "@prisma/client"
+
+interface ArticlesSearchPageProps{
+  searchParams:{searchText: string},
+}
+
+const ArticlesSearchPage = async ({searchParams : {searchText} }:ArticlesSearchPageProps) => {  
+  const articles:Article[] = await getArticlesBasedOnSearch(searchText);
+  return (
+    <section className="flex justify-center p-5 m-5">
+      <h1 className="font-bold mx-2">
+        Articles Based On : 
+        <span>{searchText}</span>
+      </h1>
+    </section>
+  )
+}
+
+export default ArticlesSearchPage
+```
+
+بعد كده هنعمل map على ال articles array لعرضها ، وهنعمل import لل ArticleItem component لإستخدامه في ال array ، ليكون الكود كالتالي : 
+```tsx
+const ArticlesSearchPage = async ({searchParams : {searchText} }:ArticlesSearchPageProps) => {  
+  const articles:Article[] = await getArticlesBasedOnSearch(searchText);
+  return (
+    <section className="flex justify-center p-5 m-5">
+      <h1 className="text-2xl font-bold mb-2 mt-7 text-gray-800 ">
+        Articles Based On : 
+        <span className="ms-1 text-green-700 text-3xl font-bold">{searchText}</span>
+      </h1>
+      <div className="flex items-center justify-center flex-wrap gap-7">
+        {articles.map(item =>(
+          <ArticleItem key={item.id} article={item}/>
+        ))}
+      </div>
+    </section>
+  )
+}
+```
+
+ولكن يفضل اننا نعمل شرط ، لو عدد ال articles المتطابقة للبحث يساوي صفر ، فنرجع رسالة ، وإلا نعمل ال map ، ليكون الكود في النهاية كالتالي : 
+```tsx
+import { getArticlesBasedOnSearch } from "@/apiCalls/articleApiCall";
+import ArticleItem from "@/components/articles/ArticleItem";
+import { Article } from "@prisma/client";
+
+interface ArticlesSearchPageProps {
+  searchParams: { searchText: string };
+}
+
+const ArticlesSearchPage = async ({searchParams: { searchText } }: ArticlesSearchPageProps) => {
+  const articles: Article[] = await getArticlesBasedOnSearch(searchText);
+  return (
+    <section className="container m-auto px-5">
+      {articles.length == 0 ? (
+        <h1 className="text-2xl font-bold mb-2 mt-7 text-gray-800 ">
+          Articles Based On :
+          <span className="text-red-700 text-3xl font-bold mx-1">
+            {searchText}
+          </span>
+          Not Found
+        </h1>
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold mb-2 mt-7 text-gray-800 ">
+            Articles Based On :
+            <span className="ms-1 text-green-700 text-3xl font-bold">
+              {searchText}
+            </span>
+          </h1>
+          <div className="flex items-center justify-center flex-wrap gap-7">
+            {articles.map((item) => (
+              <ArticleItem key={item.id} article={item} />
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+};
+
+export default ArticlesSearchPage;
+```
+وخد بالك اننا عدلنا ال route بتاع SearchArticleInput component ليكون ال query string بإسم searchText بدلاً من text ، كالتالي : 
+```tsx
+const formSubmitHandler = (e:React.FormEvent) =>{
+        e.preventDefault();
+
+        console.log({searchText});
+        router.push(`/articles/search?searchText=${searchText}`);
+    }
+```
+
+
+----------------------------------------------------------------------------
+
+
