@@ -8564,3 +8564,301 @@ export default RegisterPage
 ----------------------------------------------------------------------------
 
 
+
+هنشتغل في هذا ال commit على ال Single Article Page ،
+حيث أن اخر تحديث لملف ال articles/[id]/page.tsx كان كالتالي : 
+```tsx
+import AddCommentForm from "@/components/comments/AddCommentForm";
+import CommentItem from "@/components/comments/CommentItem";
+import { Article } from "@/utils/types";
+
+interface SingleArticelPageProps{
+    params:{ id:string }
+}
+
+const SingleArticelPage = async ({params}:SingleArticelPageProps) => {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/posts/${params.id}`);
+    if(!response.ok){
+        throw new Error('Failed To Fetch Article Details');
+    }
+    const article: Article = await response.json();
+
+  return (
+    <section className="min-h-[calc(100vh-150px)] container m-auto w-full px-5 pt-8 md:w-3/4">
+        <div className="bg-white p-7 rounded-lg mb-7">
+            <h1 className="text-3xl font-bold text-gray-700 mb-2">{article.title}</h1>
+            <div className="text-gray-400">1/1/2024</div>
+            <p className="text-gray-800 text-xl mt-5">{article.description}</p>
+        </div>
+        
+        <AddCommentForm/>
+
+        <h4 className="text-xl text-gray-800 ps-1 font-semibold mb-2 mt-7">
+            Comments
+        </h4>
+
+        <CommentItem/>
+        <CommentItem/>
+        <CommentItem/>
+    </section>
+  )
+}
+
+export default SingleArticelPage
+```
+
+هنعمل api call function بملف articleApiCall.ts ليتم إستخدامها في أي مكان بالتطبيق ، حيث سنقوم بإستخدامها في ال articles/[id]/page.tsx أيضاً ،
+وستكون ال function كالتالي : 
+```ts
+// Get Article By Id
+export async function getSingleArticle(articleId: string){
+    const response = await fetch(`${DOMAIN}/api/articles/${articleId}`, {cache: 'no-store'});
+    if(!response.ok){
+        throw new Error('Failed To Fetch Article Details');
+    }
+    return response.json();
+}
+```
+لاحظ اننا عملنا ال cache تكون no-store ، وإلا البيانات هتلاقيها اتكيشت ومش متغيرة خالص ، فمهما تحدث على ال database ، مش هتلاقيها اتغيرت عال client ،
+بعد كده هنستدعي ال function بال articles/[id]/page كالتالي : 
+```ts
+const article = await getSingleArticle(params.id);
+```
+
+ولكن عايزين نحدد نوع ال article ، فالنوع كان جاي من Article اللي في ملف utils/types ، 
+ولك هنعوز نعمل type جديد لأن ال article هنا له comment array ، وكل comment عنده user ، ولكن ال Article type الحالي كالتالي : 
+```ts
+export type Article = {
+    id:number;
+    userId:number;
+    title:string;
+    description:string
+}
+```
+فهذا ال type لن ينفع ، وبالتالي هنحذف ال Article type وهنعمل type جديد ، ليكون كالتالي : 
+```ts
+import { Article, Comment, User } from "@prisma/client";
+
+export type JWTPayload = {
+    id: number,
+    username: string,
+    isAdmin: boolean
+}
+
+export type CommentWithUser = Comment & { user: User };
+export type SingleArticle = Article & { comments: CommentWithUser[] }
+```
+
+وبالتالي هنعمل نوع ال data اللي هترجع من ال getSingleArticle api call function وهنخليها Promise لأنها async ، كالتالي : 
+```ts
+// Get Article By Id
+export async function getSingleArticle(articleId: string): Promise<SingleArticle>{
+    const response = await fetch(`${DOMAIN}/api/articles/${articleId}`, {cache: 'no-store'});
+    if(!response.ok){
+        throw new Error('Failed To Fetch Article Details');
+    }
+    return response.json();
+}
+```
+
+بعد كده هنحدد نوع ال const article في ال articles/[id]/page يكون من نوع SingleArticle ، كالتالي : 
+```tsx
+const article:SingleArticle = await getSingleArticle(params.id);
+```
+
+بعد كده في ال tsx المفترض نعرض تاريخ إنشاء ال article ، سيكون بإستخدام new Date() function مع toDateString() function كالتالي : 
+```tsx
+<div className="text-gray-400">
+    {new Date(article.createdAt).toDateString()}
+</div>
+```
+
+بعد كده هنعمل map لل article.comments في ال articles/[id]/page كالتالي : 
+```tsx
+{article.comments.map(comment=>(
+    <CommentItem key={comment.id} comment={comment}/>
+))}
+```
+
+بعد كده هنجيب البيانات الحقيقية لكل comment في ال CommentItem component مع عمل interface لل CommentItemProps ،
+ليكون الكود النهائي لل CommentItem component كالتالي : 
+```tsx
+import { CommentWithUser } from "@/utils/types"
+import { FaEdit, FaTrash } from "react-icons/fa"
+
+interface CommentItemProps{
+    comment: CommentWithUser;
+}
+
+const CommentItem = ({comment}: CommentItemProps) => {
+  return (
+    <div className="mb-5 rounded-lg p-3 bg-gray-200 border-2 border-gray-300">
+        <div className="flex justify-between items-center mb-2">
+            <strong className="text-gray-800 uppercase">
+                {comment.user.username}
+            </strong>
+            <span className="bg-yellow-700 px-1 rounded-lg text-white">
+                {new Date(comment.createdAt).toDateString()}
+            </span>
+        </div>
+        <p className="text-gray-800 mb-2">
+            {comment.text}
+        </p>
+        <div className="flex justify-end items-center">
+            <FaEdit className="text-green-600 text-xl cursor-pointer me-3"/>
+            <FaTrash className="text-red-600 text-xl cursor-pointer"/>
+        </div>
+    </div>
+  )
+}
+
+export default CommentItem
+```
+
+بعد كده هننتقل لتشغيل ال AddCommentForm وهي المسئولة عن إضافة comment لل article ، 
+كود AddCommentForm component حسب آخر تحديث كان كالتالي : 
+```tsx
+"use client";
+import { useState } from "react";
+import { toast } from "react-toastify";
+
+const AddCommentForm = () => {
+    const [text, setText] = useState('');
+
+    const formSubmitHandler = (e:React.FormEvent) =>{
+        e.preventDefault();
+        if(text === '') return toast.error('Please Write Something');
+        console.log({setText});
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler}>
+            <input type="text" value={text} onChange={(e) => setText(e.target.value)} className="w-full p-2 rounded-lg text-xl border-none bg-white focus:shadow-md" placeholder="Add Comment"/>
+            <button type="submit" className="bg-green-700 text-white mt-2 p-1 w-min text-xl rounded-lg hover:bg-green-900 transition">
+                Comment
+            </button>
+        </form>
+    );
+};
+
+export default AddCommentForm;
+```
+
+
+في ال AddCommentForm component هنحتاج axios وال useRouter ، فهنعمل لهم import ،
+وكمان هنحتاج يكون معانا ال article id عشان نحدد ال article اللي بنكتب فيه ال comment ، 
+
+فهنمرر ال articleId بال function component وهنعمل لها interface لتحديد النوع ، 
+
+بعد كده هنبعت request لإضافة comment جديد بإستخدام try و catch ليكون الكود بالنهاية كالتالي : 
+```tsx
+"use client";
+import { useState } from "react";
+import { toast } from "react-toastify";
+import axios from "axios";
+import { useRouter } from "next/navigation";
+import { DOMAIN } from "@/utils/constants";
+
+interface AddCommentFormProps {
+    articleId : number;
+}
+const AddCommentForm = ({articleId}:AddCommentFormProps) => {
+    const router = useRouter();
+
+    const [text, setText] = useState('');
+
+    const formSubmitHandler = async (e:React.FormEvent) =>{
+        e.preventDefault();
+        if(text === '') return toast.error('Please Write Something');
+        
+        try {
+            await axios.post(`${DOMAIN}/api/comments`, { text, articleId});
+            router.refresh();
+            setText('');
+        } catch (error:any) {
+            toast.error(error?.response?.data.message);
+            console.log(error);
+        }
+
+    }
+
+    return (
+        <form onSubmit={formSubmitHandler}>
+            <input type="text" value={text} onChange={(e) => setText(e.target.value)} className="w-full p-2 rounded-lg text-xl border-none bg-white focus:shadow-md" placeholder="Add Comment"/>
+            <button type="submit" className="bg-green-700 text-white mt-2 p-1 w-min text-xl rounded-lg hover:bg-green-900 transition">
+                Comment
+            </button>
+        </form>
+    );
+};
+
+export default AddCommentForm;
+```
+
+وهناخد ال id عند إستخدام ال component كالتالي : 
+```tsx
+<AddCommentForm articleId={article.id}/>
+```
+
+
+وطبعاً عشان احنا عاملين ان ال user فقط هو اللي يقدر يضيف comment جديد ، فالمفترض إن الزائر الغير user لا يرى ال form الخاصة بإضافة comment جديد ،
+
+فبملف ال articles/[id]/page هنعمل import لل cookies ولل verifyTokenForPage function للتحقق من إن كان المستخدم عمل login أم لا ، 
+ليكون الكود بالنهاية كالتالي : 
+```tsx
+import { getSingleArticle } from "@/apiCalls/articleApiCall";
+import AddCommentForm from "@/components/comments/AddCommentForm";
+import CommentItem from "@/components/comments/CommentItem";
+import { SingleArticle } from "@/utils/types";
+import { cookies } from "next/headers";
+import { verifyTokenForPage } from "@/utils/verifyToken";
+
+interface SingleArticelPageProps{
+    params:{ id:string }
+}
+
+const SingleArticelPage = async ({params}:SingleArticelPageProps) => {
+    
+    const token = cookies().get("jwtToken")?.value || "";
+    const payload = verifyTokenForPage(token);
+    
+    const article:SingleArticle = await getSingleArticle(params.id);
+
+  return (
+    <section className="min-h-[calc(100vh-150px)] container m-auto w-full px-5 pt-8 md:w-3/4">
+        <div className="bg-white p-7 rounded-lg mb-7">
+            <h1 className="text-3xl font-bold text-gray-700 mb-2">{article.title}</h1>
+            <div className="text-gray-400">
+                {new Date(article.createdAt).toDateString()}
+            </div>
+            <p className="text-gray-800 text-xl mt-5">{article.description}</p>
+        </div>
+        
+        <div className="mt-7">
+            {payload ? (
+                <AddCommentForm articleId={article.id}/>
+            ) : (
+                <p className="text-blue-600 md:text-xl">You must login first to can write a comment</p>
+            )}
+        </div>
+
+        <h4 className="text-xl text-gray-800 ps-1 font-semibold mb-2 mt-7">
+            Comments
+        </h4>
+
+        {article.comments.map(comment=>(
+            <CommentItem key={comment.id} comment={comment}/>
+        ))}
+
+    </section>
+  )
+}
+
+export default SingleArticelPage
+```
+
+
+
+----------------------------------------------------------------------------
+
+
