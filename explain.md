@@ -1,40 +1,40 @@
-هذا المشروع هو تطبيق على كورس Next Js 14 لـ Youssef Abbas باللينك التالي : 
-https://www.youtube.com/playlist?list=PL5gCk5NdNx58-q_gwuL6355afD8T_kIa0
+هذا المشروع هو تطبيق على كورس Next Js 14 لـ Youssef Abbas باللينك التالي :  
+https://www.youtube.com/playlist?list=PL5gCk5NdNx58-q_gwuL6355afD8T_kIa0  
+  
+الـ React هو Client Side Library ،  
+أما الـ Next.js هو Server Side Framework .  
+في الـ Next.js يتم بناء صفحات الويب في الـ Server ،  
+أما في React يتم بناء صفحات الويب في المتصفح ،  
 
-الـ React هو Client Side Library ،
-أما الـ Next.js هو Server Side Framework .
-في الـ Next.js يتم بناء صفحات الويب في الـ Server ،
-أما في React يتم بناء صفحات الويب في المتصفح ،
+متطلبات الكورس :  
+1- React.js  
+2- Typescript  
+3- Tailwind  
+4- Database SQL  
+5- API  
+  
+اللي هنتعلمه في هذا الكورس :  
+- Fundementals of Next,js 14  
+- Routing  
+- API with Next.js  
+- Prisma ORM  
+- Authentication & Authorization  
+  
 
-متطلبات الكورس : 
-1- React.js
-2- Typescript
-3- Tailwind
-4- Database SQL
-5- API
+هنثبت ال extensions التالية :  
+1- ES7 + React/Redux/React-Native ( by dsznajder )  
+2- Prisma (by Prisma)  
+3- Tailwind Css Intellisense  
+4- Material Icon Theme (by philipp kief)  
+  
+  
+عشان نعمل Project جديد :  
 
-اللي هنتعلمه في هذا الكورس : 
-- Fundementals of Next,js 14
-- Routing
-- API with Next.js
-- Prisma ORM
-- Authentication & Authorization
-
-
-هنثبت ال extensions التالية : 
-1- ES7 + React/Redux/React-Native ( by dsznajder )
-2- Prisma (by Prisma)
-3- Tailwind Css Intellisense
-4- Material Icon Theme (by philipp kief)
-
-
-عشان نعمل Project جديد : 
-
-`npx create-next-app@latest
-`
-`What is your project named? my-app
-` ممكن نكتب فقط . لو عايزين نسطب ملفات البرنامج في نفس الفولدر اللي احنا فيه بدلاً من إنشاء فولدر مخصص للمشروع
-
+`npx create-next-app@latest`  
+`What is your project named? my-app`  
+  
+ممكن نكتب فقط . لو عايزين نسطب ملفات البرنامج في نفس الفولدر اللي احنا فيه بدلاً من إنشاء فولدر مخصص للمشروع  
+  
 ```
 Would you like to use TypeScript? No / Yes
 Would you like to use ESLint? No / Yes
@@ -44,14 +44,14 @@ Would you like to use App Router? (recommended) No / Yes
 Would you like to customize the default import alias (@/*)? No / Yes
 What import alias would you like configured? @/*
 ```
-
---------------------------------------------------------------------------------------------
-
-
-
-في هذا ال commit :
-تم حذف أكواد الصفحة الرئيسية ، وكتابة أكواد جديدة بها لتهيئتها كالتالي : 
-
+  
+--------------------------------------------------------------------------------------------  
+  
+  
+  
+في هذا ال commit :  
+تم حذف أكواد الصفحة الرئيسية ، وكتابة أكواد جديدة بها لتهيئتها كالتالي :  
+  
 ```tsx
 const HomePage = () => {
   return (
@@ -64,10 +64,10 @@ const HomePage = () => {
 
 export default HomePage
 ```
-
-
-ومفس الحال لملف ال global.css حيث تم عمل متغير للون ال background والإعدادات الإفتراضية للـ padding و margin و box-sizing كالتالي : 
-
+  
+  
+ومفس الحال لملف ال global.css حيث تم عمل متغير للون ال background والإعدادات الإفتراضية للـ padding و margin و box-sizing كالتالي :  
+  
 ```css
 @tailwind base;
 @tailwind components;
@@ -87,9 +87,9 @@ body {
   box-sizing: border-box;
 }
 ```
-
-
-وتم أيضاً حذف ال backgroundImage من ال Tailwind config ليصبح كالتالي : 
+  
+  
+وتم أيضاً حذف ال backgroundImage من ال Tailwind config ليصبح كالتالي :  
 ```ts
 import type { Config } from "tailwindcss";
 
@@ -107,29 +107,29 @@ const config: Config = {
 };
 export default config;
 ```
-
---------------------------------------------------------------------------------------------
-
-
-
-
-يتم إنشاء الـ Route من خلال إنشاء فولدر بالمسار المطلوب داخل فولدر الـ app ، وداخل هذا الفولدر الجديد يتم إنشاء ملف بإسم page.tsx ، والذي يعتبر كملف index.html لهذه الصفحة ،
-ويمكن عمل route داخلي عن طريق إنشاء فولدرات داخلية أيضاً ، 
-
-فنقوم بإنشاء هذه الصفحات : 
-about/page.tsx
-admin/page.tsx
-articles/page.tsx
-articles/search/page.tsx
-login/page.tsx
-register/page.tsx
-
-
-هنلاحظ أن الصفحات دي كلها عبارة عن Components داخل div
-وبالتالي فأين الأكواد الكاملة من <html> و <body> وغيره ؟!!
-
-الكود الأصلي للصفحة بيكون في ال layout واللي هيكون موجود في ملف layout.tsx بالخارج ، في المستوى الأول داخل فولدر ال app ،
-وهذه الصفحات تعبر عن المتغير {children} حيث أن الكود كالتالي : 
+  
+--------------------------------------------------------------------------------------------  
+  
+  
+  
+  
+يتم إنشاء الـ Route من خلال إنشاء فولدر بالمسار المطلوب داخل فولدر الـ app ، وداخل هذا الفولدر الجديد يتم إنشاء ملف بإسم page.tsx ، والذي يعتبر كملف index.html لهذه الصفحة ،  
+ويمكن عمل route داخلي عن طريق إنشاء فولدرات داخلية أيضاً ،   
+  
+فنقوم بإنشاء هذه الصفحات :  
+about/page.tsx  
+admin/page.tsx  
+articles/page.tsx  
+articles/search/page.tsx  
+login/page.tsx  
+register/page.tsx  
+  
+  
+هنلاحظ أن الصفحات دي كلها عبارة عن Components داخل div  
+وبالتالي فأين الأكواد الكاملة من <html> و <body> وغيره ؟!!  
+  
+الكود الأصلي للصفحة بيكون في ال layout واللي هيكون موجود في ملف layout.tsx بالخارج ، في المستوى الأول داخل فولدر ال app ،  
+وهذه الصفحات تعبر عن المتغير {children} حيث أن الكود كالتالي :  
 ```tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -153,16 +153,16 @@ export default function RootLayout({
     </html>
   );
 }
-```
-
-ويمكن عمل layout لكل صفحة على حده ، وذلك من خلال إنشاء ملف داخل فولدر هذه الصفحة بإسم layout.tsx ، ولكن لن يحتوي على الأكواد الرئيسية ، لأنه سيظل الكود الاساسي داخل ال layout.tsx الخارجي ، والموجود مباشرة داخل فولدر ال app .
-
-وممكن نغير ال title وال description للموقع من خلال ال metadata بملف ال layout .
-
-
-
-عشان نستخدم أي font عايزينه من google fonts 
-أولاً عمل import له ، قم تعريفه كـ const وتحديد خواصه ، ثم إستخدامه عن طريق ال className كالتالي : 
+```  
+  
+ويمكن عمل layout لكل صفحة على حده ، وذلك من خلال إنشاء ملف داخل فولدر هذه الصفحة بإسم layout.tsx ، ولكن لن يحتوي على الأكواد الرئيسية ، لأنه سيظل الكود الاساسي داخل ال layout.tsx الخارجي ، والموجود مباشرة داخل فولدر ال app .  
+  
+وممكن نغير ال title وال description للموقع من خلال ال metadata بملف ال layout .  
+  
+  
+  
+عشان نستخدم أي font عايزينه من google fonts   
+أولاً عمل import له ، قم تعريفه كـ const وتحديد خواصه ، ثم إستخدامه عن طريق ال className كالتالي :  
 ```tsx
 import type { Metadata } from "next";
 import { Cairo, Inter, Noto_Kufi_Arabic } from "next/font/google";
